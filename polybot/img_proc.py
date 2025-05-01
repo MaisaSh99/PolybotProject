@@ -1,5 +1,6 @@
 from pathlib import Path
 from matplotlib.image import imread, imsave
+import random
 
 
 def rgb2gray(rgb):
@@ -69,8 +70,16 @@ class Img:
         self.data = rotated
 
     def salt_n_pepper(self):
-        # TODO remove the `raise` below, and write your implementation
-        raise NotImplementedError()
+        """
+        randomly set pixels to 0 (black) or 255 (white).
+        """
+        for i in range(len(self.data)):
+            for j in range(len(self.data[0])):
+                rand = random.random()
+                if rand < 0.1:
+                    self.data[i][j] = 0  # Pepper (black)
+                elif rand > 0.9:
+                    self.data[i][j] = 255  # Salt (white)
 
     def concat(self, other_img, direction='horizontal'):
         # TODO remove the `raise` below, and write your implementation
