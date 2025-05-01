@@ -101,5 +101,11 @@ class Img:
             raise ValueError("Direction must be 'horizontal' or 'vertical'.")
 
     def segment(self):
-        # TODO remove the `raise` below, and write your implementation
-        raise NotImplementedError()
+        """
+        Segment the image into binary black.
+        pixels with an intensity greater than 100 are replaced with a white pixel(255)
+        else black pixel(0)
+        """
+        for i in range(len(self.data)):
+            for j in range(len(self.data[0])):
+                self.data[i][j] = 255 if self.data[i][j] > 100 else 0
