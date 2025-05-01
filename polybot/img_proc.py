@@ -51,8 +51,22 @@ class Img:
             self.data[i] = res
 
     def rotate(self):
-        # TODO remove the `raise` below, and write your implementation
-        raise NotImplementedError()
+        """
+        Rotate the image 90 degrees clockwise.
+        """
+        #number of rows in the image matrix
+        height = len(self.data)
+        #number of columns in the image matrix
+        width = len(self.data[0])
+        # Create a new matrix with swapped dimensions(height and width)
+        rotated = [[0] * height for _ in range(width)]
+
+        for i in range(height):
+            for j in range(width):
+                # Assign value to new rotated position
+                rotated[j][height - 1 - i] = self.data[i][j]
+
+        self.data = rotated
 
     def salt_n_pepper(self):
         # TODO remove the `raise` below, and write your implementation
