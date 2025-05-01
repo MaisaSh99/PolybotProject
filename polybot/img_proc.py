@@ -82,8 +82,23 @@ class Img:
                     self.data[i][j] = 255  # Salt (white)
 
     def concat(self, other_img, direction='horizontal'):
-        # TODO remove the `raise` below, and write your implementation
-        raise NotImplementedError()
+        """
+        Concatenate this image with another image either horizontally or vertically.
+        """
+        if direction == 'horizontal':
+            if len(self.data) != len(other_img.data):
+                raise ValueError("Images must have the same height for horizontal concatenation.")
+            # Merge rows side by side
+            self.data = [row1 + row2 for row1, row2 in zip(self.data, other_img.data)]
+
+        elif direction == 'vertical':
+            if len(self.data[0]) != len(other_img.data[0]):
+                raise ValueError("Images must have the same width for vertical concatenation.")
+            # Stack rows on top of each other
+            self.data = self.data + other_img.data
+
+        else:
+            raise ValueError("Direction must be 'horizontal' or 'vertical'.")
 
     def segment(self):
         # TODO remove the `raise` below, and write your implementation
