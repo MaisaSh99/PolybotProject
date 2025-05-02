@@ -76,10 +76,10 @@ class Img:
         for i in range(len(self.data)):
             for j in range(len(self.data[0])):
                 rand = random.random()
-                if rand < 0.1:
-                    self.data[i][j] = 0  # Pepper (black)
-                elif rand > 0.9:
+                if rand < 0.2:
                     self.data[i][j] = 255  # Salt (white)
+                elif rand > 0.8:
+                    self.data[i][j] = 0  # Pepper (black)
 
     def concat(self, other_img, direction='horizontal'):
         """

@@ -4,6 +4,7 @@ import os
 import time
 from telebot.types import InputFile
 from polybot.img_proc import Img
+import threading
 
 
 class Bot:
@@ -75,4 +76,133 @@ class QuoteBot(Bot):
 
 
 class ImageProcessingBot(Bot):
-    pass
+    def __init__(self, token, telegram_chat_url):
+        super().__init__(token, telegram_chat_url)
+        self.media_groups = {}  # {media_group_id: {'chat_id': int, 'photos': [], 'filter': str, 'timer': threading.Timer}}
+
+    def handle_message(self, msg):
+        chat_id = msg['chat']['id']
+        logger.info(f'Incoming message: {msg}')
+
+        if 'text' in msg and msg['text'].strip().lower() == 'hi':
+            self.send_text(chat_id, "Hi, how can I help you?")
+            return
+
+        if self.is_current_msg_photo(msg):
+            photo_path = self.download_user_photo(msg)
+            media_group_id = msg.get('media_group_id')
+            caption = msg.get('caption', '').strip().lower()
+
+            if media_group_id:
+                group = self.media_groups.setdefault(media_group_id, {
+                    'chat_id': chat_id,
+                    'photos': [],
+                    'filter': caption if caption else None,
+                    'timer': None
+                })
+
+                group['photos'].append(photo_path)
+                if caption:
+                    group['filter'] = caption
+
+                # Cancel old timer if exists
+                if group['timer']:
+                    group['timer'].cancel()
+
+                # Set a timer to process the group after 2 seconds (to allow other images to arrive)
+                timer = threading.Timer(2.0, self._process_media_group, args=(media_group_id,))
+                group['timer'] = timer
+                timer.start()
+
+                return
+
+            # Single image with caption
+            if not caption:
+                self.send_text(chat_id, "You need to choose a filter.")
+                return
+
+            self.apply_filter_from_caption(chat_id, photo_path, caption)
+            return
+
+        self.send_text(chat_id, "Please send a photo with a caption indicating the filter to apply.")
+
+    def _process_media_group(self, group_id):
+        group = self.media_groups.pop(group_id, None)
+        if not group:
+            return
+
+        chat_id = group['chat_id']
+        photos = group['photos']
+        filter_name = group['filter']
+
+        if not filter_name:
+            self.send_text(chat_id, "You need to choose a filter.")
+            return
+
+        if filter_name == 'concat':
+            if len(photos) != 2:
+                self.send_text(chat_id, "The 'concat' filter works only on two photos.")
+                return
+            self._apply_concat(chat_id, photos)
+        else:
+            self.send_text(chat_id, f"Unknown group filter '{filter_name}'.")
+
+    def _apply_concat(self, chat_id, photos):
+        try:
+            img1 = Img(photos[0])
+            img2 = Img(photos[1])
+
+            if len(img1.data) == len(img2.data):
+                img1.concat(img2, direction='horizontal')
+            elif len(img1.data[0]) == len(img2.data[0]):
+                img1.concat(img2, direction='vertical')
+            else:
+                self.send_text(chat_id, "Images have incompatible dimensions for concatenation.")
+                return
+
+            result_path = img1.save_img()
+            self.send_photo(chat_id, str(result_path))
+        except Exception as e:
+            logger.error(f"Concat error: {e}")
+            self.send_text(chat_id, "Concat failed. Make sure both images are compatible.")
+
+    def apply_filter_from_caption(self, chat_id, photo_path, caption):
+        img = Img(photo_path)
+        try:
+            if caption == 'blur':
+                img.blur()
+            elif caption == 'rotate':
+                img.rotate()
+            elif caption in ('salt and pepper', 'salt_n_pepper'):
+                img.salt_n_pepper()
+            elif caption == 'contour':
+                img.contour()
+            elif caption == 'segment':
+                img.segment()
+            else:
+                self.send_text(chat_id, f"Unknown filter '{caption}'.")
+                return
+
+            filtered_path = img.save_img()
+            self.send_photo(chat_id, str(filtered_path))
+
+        except Exception as e:
+            logger.error(f"Error applying filter: {e}")
+            self.send_text(chat_id, "An error occurred while applying the filter.")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
