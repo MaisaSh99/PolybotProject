@@ -1,26 +1,19 @@
+import threading
 import telebot
 from loguru import logger
 import os
 import time
 from telebot.types import InputFile
 from polybot.img_proc import Img
-import threading
 
 
 class Bot:
 
     def __init__(self, token, telegram_chat_url):
-        # create a new instance of the TeleBot class.
-        # all communication with Telegram servers are done using self.telegram_bot_client
         self.telegram_bot_client = telebot.TeleBot(token)
-
-        # remove any existing webhooks configured in Telegram servers
         self.telegram_bot_client.remove_webhook()
         time.sleep(0.5)
-
-        # set the webhook URL
         self.telegram_bot_client.set_webhook(url=f'{telegram_chat_url}/{token}/', timeout=60)
-
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
     def send_text(self, chat_id, text):
@@ -34,23 +27,27 @@ class Bot:
 
     def download_user_photo(self, msg):
         """
-        Downloads the photos that sent to the Bot to `photos` directory (should be existed)
-        :return:
+        Downloads the photo sent to the Bot to `photos` directory (must exist)
         """
         if not self.is_current_msg_photo(msg):
             raise RuntimeError(f'Message content of type \'photo\' expected')
 
-        file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
-        data = self.telegram_bot_client.download_file(file_info.file_path)
-        folder_name = file_info.file_path.split('/')[0]
+        try:
+            file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
+            data = self.telegram_bot_client.download_file(file_info.file_path)
+            folder_name = file_info.file_path.split('/')[0]
 
-        if not os.path.exists(folder_name):
-            os.makedirs(folder_name)
+            if not os.path.exists(folder_name):
+                os.makedirs(folder_name)
 
-        with open(file_info.file_path, 'wb') as photo:
-            photo.write(data)
+            with open(file_info.file_path, 'wb') as photo:
+                photo.write(data)
 
-        return file_info.file_path
+            return file_info.file_path
+        except OSError as e:
+            logger.error(f"File saving error: {e}")
+            self.send_text(msg['chat']['id'], "Something went wrong, try again please.")
+            raise
 
     def send_photo(self, chat_id, img_path):
         if not os.path.exists(img_path):
@@ -62,7 +59,6 @@ class Bot:
         )
 
     def handle_message(self, msg):
-        """Bot Main message handler"""
         logger.info(f'Incoming message: {msg}')
         self.send_text(msg['chat']['id'], f'Your original message: {msg["text"]}')
 
@@ -70,7 +66,6 @@ class Bot:
 class QuoteBot(Bot):
     def handle_message(self, msg):
         logger.info(f'Incoming message: {msg}')
-
         if msg["text"] != 'Please don\'t quote me':
             self.send_text_with_quote(msg['chat']['id'], msg["text"], quoted_msg_id=msg["message_id"])
 
@@ -78,7 +73,7 @@ class QuoteBot(Bot):
 class ImageProcessingBot(Bot):
     def __init__(self, token, telegram_chat_url):
         super().__init__(token, telegram_chat_url)
-        self.media_groups = {}  # {media_group_id: {'chat_id': int, 'photos': [], 'filter': str, 'timer': threading.Timer}}
+        self.media_groups = {}
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
@@ -89,7 +84,11 @@ class ImageProcessingBot(Bot):
             return
 
         if self.is_current_msg_photo(msg):
-            photo_path = self.download_user_photo(msg)
+            try:
+                photo_path = self.download_user_photo(msg)
+            except Exception:
+                return
+
             media_group_id = msg.get('media_group_id')
             caption = msg.get('caption', '').strip().lower()
 
@@ -105,18 +104,14 @@ class ImageProcessingBot(Bot):
                 if caption:
                     group['filter'] = caption
 
-                # Cancel old timer if exists
                 if group['timer']:
                     group['timer'].cancel()
 
-                # Set a timer to process the group after 2 seconds (to allow other images to arrive)
                 timer = threading.Timer(2.0, self._process_media_group, args=(media_group_id,))
                 group['timer'] = timer
                 timer.start()
-
                 return
 
-            # Single image with caption
             if not caption:
                 self.send_text(chat_id, "You need to choose a filter.")
                 return
@@ -185,24 +180,6 @@ class ImageProcessingBot(Bot):
 
             filtered_path = img.save_img()
             self.send_photo(chat_id, str(filtered_path))
-
         except Exception as e:
             logger.error(f"Error applying filter: {e}")
             self.send_text(chat_id, "An error occurred while applying the filter.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
