@@ -3,6 +3,7 @@ import telebot
 from loguru import logger
 import os
 import time
+import requests
 from telebot.types import InputFile
 from polybot.img_proc import Img
 
@@ -26,9 +27,6 @@ class Bot:
         return 'photo' in msg
 
     def download_user_photo(self, msg):
-        """
-        Downloads the photo sent to the Bot to `photos` directory (must exist)
-        """
         if not self.is_current_msg_photo(msg):
             raise RuntimeError(f'Message content of type \'photo\' expected')
 
@@ -53,10 +51,7 @@ class Bot:
         if not os.path.exists(img_path):
             raise RuntimeError("Image path doesn't exist")
 
-        self.telegram_bot_client.send_photo(
-            chat_id,
-            InputFile(img_path)
-        )
+        self.telegram_bot_client.send_photo(chat_id, InputFile(img_path))
 
     def handle_message(self, msg):
         logger.info(f'Incoming message: {msg}')
@@ -71,9 +66,10 @@ class QuoteBot(Bot):
 
 
 class ImageProcessingBot(Bot):
-    def __init__(self, token, telegram_chat_url):
+    def __init__(self, token, telegram_chat_url, yolo_service_url):
         super().__init__(token, telegram_chat_url)
         self.media_groups = {}
+        self.yolo_service_url = yolo_service_url
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
@@ -89,8 +85,8 @@ class ImageProcessingBot(Bot):
             except Exception:
                 return
 
-            media_group_id = msg.get('media_group_id')
             caption = msg.get('caption', '').strip().lower()
+            media_group_id = msg.get('media_group_id')
 
             if media_group_id:
                 group = self.media_groups.setdefault(media_group_id, {
@@ -116,7 +112,10 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "You need to choose a filter.")
                 return
 
-            self.apply_filter_from_caption(chat_id, photo_path, caption)
+            if caption == 'yolo':
+                self.apply_yolo(chat_id, photo_path)
+            else:
+                self.apply_filter_from_caption(chat_id, photo_path, caption)
             return
 
         self.send_text(chat_id, "Please send a photo with a caption indicating the filter to apply.")
@@ -183,3 +182,28 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.error(f"Error applying filter: {e}")
             self.send_text(chat_id, "An error occurred while applying the filter.")
+
+    def apply_yolo(self, chat_id, photo_path):
+        try:
+            with open(photo_path, 'rb') as image_file:
+                response = requests.post(
+                    f"{self.yolo_service_url}/predict",
+                    files={'file': image_file}
+                )
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f"YOLO raw response: {result}")
+
+            labels = result.get("labels", [])
+            if not labels:
+                self.send_text(chat_id, "No objects detected.")
+                return
+
+            result_text = "Detected objects:\n" + "\n".join(labels)
+            self.send_text(chat_id, result_text)
+
+        except Exception as e:
+            logger.error(f"YOLO prediction failed: {e}")
+            self.send_text(chat_id, "Failed to process image with YOLO.")
+
+
