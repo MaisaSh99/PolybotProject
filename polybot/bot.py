@@ -66,7 +66,7 @@ class QuoteBot(Bot):
 
 
 class ImageProcessingBot(Bot):
-    def __init__(self, token, telegram_chat_url, yolo_service_url):
+    def __init__(self, token, telegram_chat_url, yolo_service_url='http://localhost:8080'):
         super().__init__(token, telegram_chat_url)
         self.media_groups = {}
         self.yolo_service_url = yolo_service_url
