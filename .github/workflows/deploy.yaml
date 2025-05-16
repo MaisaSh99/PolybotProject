@@ -1,0 +1,30 @@
+name: Deploy Polybot
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up SSH and deploy
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+        run: |
+          echo "$PRIVATE_KEY" > key.pem
+          chmod 400 key.pem
+          ssh -o StrictHostKeyChecking=no -i key.pem $EC2_USER@$EC2_HOST << 'EOF'
+            cd PolybotProject
+            git pull origin main
+            source ~/PolybotServicePython/venv/bin/activate
+            pip install -r polybot/requirements.txt
+            sudo systemctl restart polybot
+          EOF
