@@ -1,0 +1,17 @@
+[Unit]
+Description=Ngrok Service for Polybot
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ngrok http 8443 --domain=minnow-crucial-nicely.ngrok-free.app
+Restart=always
+RestartSec=5
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+
+[Install]
+WantedBy=multi-user.target
+
+
+
