@@ -20,10 +20,20 @@ jobs:
         run: |
           pip install -r polybot/requirements.txt
 
-      - name: Run unit tests
+      - name: Run concat(), rotate(), salt_n_pepper(), segment() tests
         run: |
+          echo -e "\n\nTesting concat()\n"
           python -m polybot.test.test_concat
+          
+          echo -e "\n\nTesting rotate()\n"
           python -m polybot.test.test_rotate
+          
+          echo -e "\n\nTesting salt_n_pepper()\n"
           python -m polybot.test.test_salt_n_pepper
+          
+          echo -e "\n\nTesting segment()\n"
           python -m polybot.test.test_segment
+
+      - name: Test Telegram bot logic
+        run: |
           python -m polybot.test.test_telegram_bot
