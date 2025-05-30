@@ -42,3 +42,4 @@ jobs:
       - name: Run deployment script on EC2
         run: |
           ssh dev "~/deploy-dev.sh"
+#test
