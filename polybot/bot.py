@@ -11,6 +11,7 @@ from datetime import datetime
 
 
 class Bot:
+
     def __init__(self, token, telegram_chat_url):
         self.telegram_bot_client = telebot.TeleBot(token)
         self.telegram_bot_client.remove_webhook()
@@ -18,9 +19,9 @@ class Bot:
         self.telegram_bot_client.set_webhook(url=f'{telegram_chat_url}/{token}/', timeout=60)
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
-        self.s3 = boto3.client('s3')
-        self.bucket_name = os.getenv("S3_BUCKET_NAME", "maisa-polybot-images")
-        logger.info(f"Using S3 bucket: {self.bucket_name}")
+        self.bucket_name = os.environ.get('S3_BUCKET_NAME', 'maisa-polybot-images')
+        logger.info(f"🪣 Using S3 bucket: {self.bucket_name}")
+        self.s3 = boto3.client('s3', region_name='us-east-2')  # Replace with your region if needed
 
     def send_text(self, chat_id, text):
         self.telegram_bot_client.send_message(chat_id, text)
@@ -46,9 +47,10 @@ class Bot:
             with open(file_info.file_path, 'wb') as photo:
                 photo.write(data)
 
+            logger.info(f"✅ Photo saved locally: {file_info.file_path}")
             return file_info.file_path
         except OSError as e:
-            logger.error(f"File saving error: {e}")
+            logger.error(f"❌ File saving error: {e}")
             self.send_text(msg['chat']['id'], "Something went wrong, try again please.")
             raise
 
@@ -63,19 +65,18 @@ class Bot:
         self.send_text(msg['chat']['id'], f'Your original message: {msg["text"]}')
 
     def upload_to_s3(self, local_path, s3_path):
+        logger.info(f"📤 Uploading {local_path} to s3://{self.bucket_name}/{s3_path}")
         try:
-            logger.info(f"Uploading {local_path} to s3://{self.bucket_name}/{s3_path}")
+            if not os.path.exists(local_path):
+                logger.error(f"❌ File not found: {local_path}")
+                return
+            if os.path.getsize(local_path) == 0:
+                logger.error(f"❌ File is empty: {local_path}")
+                return
             self.s3.upload_file(local_path, self.bucket_name, s3_path)
+            logger.info("✅ Upload successful")
         except Exception as e:
-            logger.error(f"Failed to upload to S3: {e}")
-            raise
-
-
-class QuoteBot(Bot):
-    def handle_message(self, msg):
-        logger.info(f'Incoming message: {msg}')
-        if msg["text"] != 'Please don\'t quote me':
-            self.send_text_with_quote(msg['chat']['id'], msg["text"], quoted_msg_id=msg["message_id"])
+            logger.error(f"❌ Upload to S3 failed: {e}")
 
 
 class ImageProcessingBot(Bot):
@@ -217,7 +218,7 @@ class ImageProcessingBot(Bot):
 
             response.raise_for_status()
             result = response.json()
-            logger.info(f"YOLO response: {result}")
+            logger.info(f"YOLO raw response: {result}")
 
             labels = result.get("labels", [])
             if not labels:
