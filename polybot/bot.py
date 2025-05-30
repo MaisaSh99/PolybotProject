@@ -66,15 +66,23 @@ class Bot:
 
     def upload_to_s3(self, local_path, s3_path):
         logger.info(f"📤 Uploading {local_path} to s3://{self.bucket_name}/{s3_path}")
+
         try:
+            logger.info("🔍 Checking if file exists and is not empty...")
             if not os.path.exists(local_path):
                 logger.error(f"❌ File not found: {local_path}")
                 return
-            if os.path.getsize(local_path) == 0:
+
+            file_size = os.path.getsize(local_path)
+            logger.info(f"📏 File size: {file_size} bytes")
+
+            if file_size == 0:
                 logger.error(f"❌ File is empty: {local_path}")
                 return
+
             self.s3.upload_file(local_path, self.bucket_name, s3_path)
             logger.info("✅ Upload successful")
+
         except Exception as e:
             logger.error(f"❌ Upload to S3 failed: {e}")
 
@@ -204,6 +212,8 @@ class ImageProcessingBot(Bot):
             telegram_user_id = str(from_id if from_id is not None else chat_id)
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
+            logger.info(f"🖼️ Using downloaded photo at: {photo_path}")
+
             s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
             self.upload_to_s3(photo_path, s3_key)
             logger.info(f"[Polybot] Uploaded to: {s3_key}")
@@ -231,4 +241,3 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
             self.send_text(chat_id, "Failed to process image with YOLO.")
-
