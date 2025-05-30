@@ -11,7 +11,6 @@ from datetime import datetime
 
 
 class Bot:
-
     def __init__(self, token, telegram_chat_url):
         self.telegram_bot_client = telebot.TeleBot(token)
         self.telegram_bot_client.remove_webhook()
@@ -20,7 +19,8 @@ class Bot:
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
         self.s3 = boto3.client('s3')
-        self.bucket_name = 'maisa-polybot-images'
+        self.bucket_name = os.getenv("S3_BUCKET_NAME", "maisa-polybot-images")
+        logger.info(f"Using S3 bucket: {self.bucket_name}")
 
     def send_text(self, chat_id, text):
         self.telegram_bot_client.send_message(chat_id, text)
@@ -63,7 +63,12 @@ class Bot:
         self.send_text(msg['chat']['id'], f'Your original message: {msg["text"]}')
 
     def upload_to_s3(self, local_path, s3_path):
-        self.s3.upload_file(local_path, self.bucket_name, s3_path)
+        try:
+            logger.info(f"Uploading {local_path} to s3://{self.bucket_name}/{s3_path}")
+            self.s3.upload_file(local_path, self.bucket_name, s3_path)
+        except Exception as e:
+            logger.error(f"Failed to upload to S3: {e}")
+            raise
 
 
 class QuoteBot(Bot):
