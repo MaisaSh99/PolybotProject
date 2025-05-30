@@ -13,7 +13,10 @@ jobs:
     env:
       PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
       EC2_IP: ${{ secrets.EC2_HOST }}
+      EC2_USER: ${{ secrets.EC2_USER }}
       REPO: ${{ github.repository }}
+      BOT_PROD_TOKEN: ${{ secrets.BOT_PROD_TOKEN }}
+      NGROK_DOMAIN: "https://minnow-crucial-nicely.ngrok-free.app"
 
     steps:
       - name: Set up SSH key
@@ -21,37 +24,51 @@ jobs:
           echo "$PRIVATE_KEY" > key.pem
           chmod 600 key.pem
 
+      - name: Upload service files
+        run: |
+          scp -i key.pem -o StrictHostKeyChecking=no polybot-prod.service $EC2_USER@$EC2_IP:~/polybot-prod.service
+          scp -i key.pem -o StrictHostKeyChecking=no ngrok-prod.service $EC2_USER@$EC2_IP:~/ngrok-prod.service
+
       - name: SSH and deploy
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@$EC2_IP << 'EOF'
+          ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << 'EOF'
             echo "✅ Installing base system packages..."
             sudo apt update
             sudo apt install -y git python3 python3-pip python3-venv
 
             echo "📁 Preparing repo..."
             REPO_DIR="PolybotServicePython"
-            if [ -d "$REPO_DIR" ]; then
-              cd "$REPO_DIR"
+            if [ -d "\$REPO_DIR" ]; then
+              cd "\$REPO_DIR"
               git pull
             else
-              git clone https://github.com/${REPO}.git "$REPO_DIR"
-              cd "$REPO_DIR"
+              git clone https://github.com/${REPO}.git "\$REPO_DIR"
+              cd "\$REPO_DIR"
             fi
 
-            echo "⚙️ Setting up systemd service..."
-            sudo cp polybot-prod.service /etc/systemd/system/polybot-prod.service
-
+            echo "📦 Setting up Python environment..."
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
-
             source venv/bin/activate
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
 
+            echo "⚙️ Installing and starting services..."
+            sudo mv ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
+            sudo mv ~/ngrok-prod.service /etc/systemd/system/ngrok-prod.service
             sudo systemctl daemon-reload
             sudo systemctl restart polybot-prod.service
+            sudo systemctl restart ngrok-prod.service
             sudo systemctl enable polybot-prod.service
+            sudo systemctl enable ngrok-prod.service
 
-            echo "✅ Production deployment complete!"
+            echo "🌐 Waiting for ngrok to establish connection..."
+            sleep 10
+
+            echo "📡 Setting Telegram webhook..."
+            curl -X POST https://api.telegram.org/bot${BOT_PROD_TOKEN}/setWebhook \
+              -d "url=${NGROK_DOMAIN}"
+
+            echo "✅ Production deployment and webhook setup complete!"
           EOF
