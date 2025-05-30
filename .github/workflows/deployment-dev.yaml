@@ -27,7 +27,7 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          echo "Host dev
+          echo "Host polybot-dev
                 HostName $EC2_HOST
                 User $EC2_USER
                 IdentityFile ~/.ssh/id_rsa
@@ -35,11 +35,10 @@ jobs:
 
       - name: Copy service file and deploy script to EC2
         run: |
-          scp polybot-dev.service dev:~/polybot-dev.service
-          scp deploy-dev.sh dev:~/deploy-dev.sh
-          ssh dev "chmod +x ~/deploy-dev.sh"
+          scp polybot-dev.service polybot-dev:~/polybot-dev.service
+          scp deploy-dev.sh polybot-dev:~/deploy-dev.sh
+          ssh polybot-dev "chmod +x ~/deploy-dev.sh"
 
       - name: Run deployment script on EC2
         run: |
-          ssh dev "~/deploy-dev.sh"
-#test
+          ssh polybot-dev "~/deploy-dev.sh"
