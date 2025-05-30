@@ -22,6 +22,7 @@ class Bot:
         self.bucket_name = os.getenv('S3_BUCKET_NAME') or 'maisa-polybot-images'
         logger.info(f"🪣 Using S3 bucket: {self.bucket_name}")
         self.s3 = boto3.client('s3', region_name='us-east-2')
+        self.s3.upload_file('/tmp/test.jpg', 'maisa-dev-bucket', 'beatles.jpeg')
 
     def send_text(self, chat_id, text):
         self.telegram_bot_client.send_message(chat_id, text)
