@@ -17,8 +17,8 @@ jobs:
       EC2_USER: ${{ secrets.EC2_USER }}
       REPO: ${{ github.repository }}
       BOT_PROD_TOKEN: ${{ secrets.BOT_PROD_TOKEN }}
-      NGROK_DOMAIN: "minnow-crucial-nicely.ngrok-free.app"
       NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      NGROK_DOMAIN: "https://minnow-crucial-nicely.ngrok-free.app"
 
     steps:
       - name: Checkout repo
@@ -37,13 +37,11 @@ jobs:
       - name: SSH and deploy
         run: |
           ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << EOF
-            set -e
-
-            echo "✅ Installing system packages..."
+            echo "✅ Installing required packages..."
             sudo apt update
             sudo apt install -y git python3 python3-pip python3-venv curl unzip
 
-            echo "📥 Installing ngrok if missing..."
+            echo "📥 Installing ngrok if not present..."
             if ! command -v ngrok &> /dev/null; then
               curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
               echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
@@ -51,7 +49,7 @@ jobs:
             fi
 
             echo "🔐 Authenticating ngrok..."
-            ngrok config add-authtoken ${NGROK_AUTH_TOKEN}
+            ngrok config add-authtoken $NGROK_AUTH_TOKEN
 
             echo "📁 Cloning or updating repo..."
             cd /home/ubuntu
@@ -63,7 +61,7 @@ jobs:
               cd PolybotServicePython
             fi
 
-            echo "📦 Setting up Python environment..."
+            echo "📦 Setting up Python venv..."
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
@@ -71,7 +69,7 @@ jobs:
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
 
-            echo "⚙️ Setting up systemd services..."
+            echo "⚙️ Installing and starting services..."
             sudo mv ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
             sudo mv ~/ngrok-prod.service /etc/systemd/system/ngrok-prod.service
             sudo systemctl daemon-reload
@@ -80,12 +78,12 @@ jobs:
             sudo systemctl enable polybot-prod.service
             sudo systemctl enable ngrok-prod.service
 
-            echo "⏳ Waiting for ngrok to establish connection..."
+            echo "🌐 Waiting for ngrok tunnel..."
             sleep 10
 
             echo "📡 Setting Telegram webhook..."
-            curl -X POST https://api.telegram.org/bot${BOT_PROD_TOKEN}/setWebhook \
-              -d "url=https://${NGROK_DOMAIN}"
+            curl -X POST https://api.telegram.org/bot$BOT_PROD_TOKEN/setWebhook \
+              -d "url=$NGROK_DOMAIN"
 
             echo "✅ Production deployment and webhook setup complete!"
           EOF
