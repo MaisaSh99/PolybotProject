@@ -20,8 +20,7 @@ class Bot:
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
         self.s3 = boto3.client('s3')
-        self.bucket_name = os.getenv("S3_BUCKET_NAME", "maisa-polybot-images")
-        logger.info(f"[Polybot] Using S3 bucket: {self.bucket_name}")
+        self.bucket_name = 'maisa-polybot-images'
 
     def send_text(self, chat_id, text):
         self.telegram_bot_client.send_message(chat_id, text)
@@ -64,7 +63,6 @@ class Bot:
         self.send_text(msg['chat']['id'], f'Your original message: {msg["text"]}')
 
     def upload_to_s3(self, local_path, s3_path):
-        logger.info(f"[Polybot] Uploading {local_path} to s3://{self.bucket_name}/{s3_path}")
         self.s3.upload_file(local_path, self.bucket_name, s3_path)
 
 
@@ -148,11 +146,6 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "The 'concat' filter works only on two photos.")
                 return
             self._apply_concat(chat_id, photos)
-
-        elif filter_name == 'yolo':
-            self.send_text(chat_id, "YOLO does not support grouped images. Please send one photo at a time.")
-            return
-
         else:
             self.send_text(chat_id, f"Unknown group filter '{filter_name}'.")
 
@@ -207,7 +200,7 @@ class ImageProcessingBot(Bot):
 
             s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
             self.upload_to_s3(photo_path, s3_key)
-            logger.info(f"[Polybot] Uploaded to: s3://{self.bucket_name}/{s3_key}")
+            logger.info(f"[Polybot] Uploaded to: {s3_key}")
 
             response = requests.post(
                 f"{self.yolo_service_url}/predict",
