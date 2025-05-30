@@ -12,6 +12,3 @@ WorkingDirectory=/home/ubuntu
 
 [Install]
 WantedBy=multi-user.target
-
-
-

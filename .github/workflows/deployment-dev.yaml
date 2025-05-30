@@ -4,57 +4,87 @@ on:
   push:
     branches:
       - dev
+  workflow_dispatch:
 
 jobs:
   deploy-polybot-dev:
     name: Deploy to EC2 (Dev)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/dev'
+
     env:
       PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
       EC2_IP: ${{ secrets.EC2_DEV_HOST }}
+      EC2_USER: ${{ secrets.EC2_DEV_USER }}
       REPO: ${{ github.repository }}
+      BOT_DEV_TOKEN: ${{ secrets.BOT_DEV_TOKEN }}
+      NGROK_DEV_AUTH_TOKEN: ${{ secrets.NGROK_DEV_AUTH_TOKEN }}
+      NGROK_DOMAIN: "https://loosely-coherent-lacewing.ngrok-free.app"
+
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Set up SSH key
         run: |
           echo "$PRIVATE_KEY" > key.pem
           chmod 600 key.pem
 
-      - name: SSH and deploy (Dev)
+      - name: Upload service files
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_DEV_USER }}@$EC2_IP << 'EOF'
-            echo "✅ Updating and installing base system packages..."
-            sudo apt update
-            sudo apt install -y git python3 python3-pip python3-venv
+          scp -i key.pem -o StrictHostKeyChecking=no polybot-dev.service $EC2_USER@$EC2_IP:~/polybot-dev.service
+          scp -i key.pem -o StrictHostKeyChecking=no ngrok-dev.service $EC2_USER@$EC2_IP:~/ngrok-dev.service
 
-            echo "📁 Preparing repo..."
-            REPO_DIR="PolybotServicePython"
-            if [ -d "$REPO_DIR" ]; then
-              echo "Repo exists. Pulling latest changes..."
-              cd "$REPO_DIR"
+      - name: SSH and deploy
+        run: |
+          ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << EOF
+            echo "✅ Installing required packages..."
+            sudo apt update
+            sudo apt install -y git python3 python3-pip python3-venv curl unzip
+
+            echo "📥 Installing ngrok if not present..."
+            if ! command -v ngrok &> /dev/null; then
+              curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+              echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+              sudo apt update && sudo apt install -y ngrok
+            fi
+
+            echo "🔐 Authenticating ngrok..."
+            ngrok config add-authtoken $NGROK_DEV_AUTH_TOKEN
+
+            echo "📁 Cloning or updating repo..."
+            cd /home/ubuntu
+            if [ -d "PolybotServicePython" ]; then
+              cd PolybotServicePython
               git pull
             else
-              echo "Cloning repo from GitHub..."
-              git clone https://github.com/${REPO}.git "$REPO_DIR"
-              cd "$REPO_DIR"
+              git clone https://github.com/${REPO}.git PolybotServicePython
+              cd PolybotServicePython
             fi
 
-            echo "⚙️ Setting up polybot systemd service (Dev)..."
-            sudo cp polybot-dev.service /etc/systemd/system/polybot.service
-
+            echo "📦 Setting up Python venv..."
             if [ ! -d "venv" ]; then
-              echo "📦 Creating Python virtual environment..."
               python3 -m venv venv
             fi
-
             source venv/bin/activate
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
 
-            echo "🔁 Reloading and restarting service..."
+            echo "⚙️ Installing and starting services..."
+            sudo mv ~/polybot-dev.service /etc/systemd/system/polybot-dev.service
+            sudo mv ~/ngrok-dev.service /etc/systemd/system/ngrok-dev.service
             sudo systemctl daemon-reload
-            sudo systemctl restart polybot.service
-            sudo systemctl enable polybot.service
+            sudo systemctl restart polybot-dev.service
+            sudo systemctl restart ngrok-dev.service
+            sudo systemctl enable polybot-dev.service
+            sudo systemctl enable ngrok-dev.service
 
-            echo "✅ Development deployment complete and service running!"
+            echo "🌐 Waiting for ngrok tunnel..."
+            sleep 10
+
+            echo "📡 Setting Telegram webhook..."
+            curl -X POST https://api.telegram.org/bot$BOT_DEV_TOKEN/setWebhook \
+              -d "url=$NGROK_DOMAIN"
+
+            echo "✅ Dev deployment and webhook setup complete!"
           EOF
