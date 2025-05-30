@@ -40,7 +40,7 @@ jobs:
             fi
 
             echo "⚙️ Setting up polybot systemd service..."
-            sudo cp polybot.service /etc/systemd/system/polybot.service
+            sudo cp polybot-prod.service /etc/systemd/system/polybot-prod.service
 
             if [ ! -d "venv" ]; then
               echo "📦 Creating Python virtual environment..."
@@ -53,8 +53,8 @@ jobs:
 
             echo "🔁 Reloading and restarting service..."
             sudo systemctl daemon-reload
-            sudo systemctl restart polybot.service
-            sudo systemctl enable polybot.service
+            sudo systemctl restart polybot-prod.service
+            sudo systemctl enable polybot-prod.service
 
             echo "✅ Deployment complete and service running!"
           EOF

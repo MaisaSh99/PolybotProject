@@ -37,7 +37,7 @@ jobs:
               cd "$REPO_DIR"
             fi
             echo "⚙️ Setting up polybot systemd service (Dev)..."
-            sudo cp polybot-dev.service /etc/systemd/system/polybot.service
+            sudo cp polybot-dev.service /etc/systemd/system/polybot-dev.service
             if [ ! -d "venv" ]; then
               echo "📦 Creating Python virtual environment..."
               python3 -m venv venv
@@ -47,7 +47,7 @@ jobs:
             pip install -r polybot/requirements.txt
             echo "🔁 Reloading and restarting service..."
             sudo systemctl daemon-reload
-            sudo systemctl restart polybot.service
-            sudo systemctl enable polybot.service
+            sudo systemctl restart polybot-dev.service
+            sudo systemctl enable polybot-dev.service
             echo "✅ Development deployment complete and service running!"
           EOF
