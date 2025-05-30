@@ -10,6 +10,7 @@ jobs:
     name: Deploy to EC2
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+
     env:
       PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
       EC2_IP: ${{ secrets.EC2_HOST }}
@@ -19,6 +20,9 @@ jobs:
       NGROK_DOMAIN: "https://minnow-crucial-nicely.ngrok-free.app"
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Set up SSH key
         run: |
           echo "$PRIVATE_KEY" > key.pem
@@ -31,19 +35,28 @@ jobs:
 
       - name: SSH and deploy
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << 'EOF'
+          ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << EOF
             echo "✅ Installing base system packages..."
             sudo apt update
             sudo apt install -y git python3 python3-pip python3-venv
 
-            echo "📁 Preparing repo..."
-            REPO_DIR="PolybotServicePython"
-            if [ -d "\$REPO_DIR" ]; then
-              cd "\$REPO_DIR"
+            echo "🌐 Installing ngrok if missing..."
+            if ! command -v ngrok &> /dev/null; then
+              curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+              echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+              sudo apt update && sudo apt install -y ngrok
+            else
+              echo "✅ ngrok already installed"
+            fi
+
+            echo "📁 Cloning or updating repo..."
+            cd /home/ubuntu
+            if [ -d "PolybotServicePython" ]; then
+              cd PolybotServicePython
               git pull
             else
-              git clone https://github.com/${REPO}.git "\$REPO_DIR"
-              cd "\$REPO_DIR"
+              git clone https://github.com/${REPO}.git PolybotServicePython
+              cd PolybotServicePython
             fi
 
             echo "📦 Setting up Python environment..."
@@ -54,7 +67,7 @@ jobs:
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
 
-            echo "⚙️ Installing and starting services..."
+            echo "⚙️ Installing and starting systemd services..."
             sudo mv ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
             sudo mv ~/ngrok-prod.service /etc/systemd/system/ngrok-prod.service
             sudo systemctl daemon-reload
@@ -63,7 +76,7 @@ jobs:
             sudo systemctl enable polybot-prod.service
             sudo systemctl enable ngrok-prod.service
 
-            echo "🌐 Waiting for ngrok to establish connection..."
+            echo "🌐 Waiting for ngrok tunnel..."
             sleep 10
 
             echo "📡 Setting Telegram webhook..."
