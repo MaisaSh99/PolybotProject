@@ -6,6 +6,9 @@ import time
 import requests
 from telebot.types import InputFile
 from polybot.img_proc import Img
+import boto3
+from datetime import datetime
+import os
 
 
 class Bot:
@@ -16,6 +19,9 @@ class Bot:
         time.sleep(0.5)
         self.telegram_bot_client.set_webhook(url=f'{telegram_chat_url}/{token}/', timeout=60)
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
+
+        self.s3 = boto3.client('s3')
+        self.bucket_name = os.getenv("S3_BUCKET_NAME", "maisa-polybot-images")
 
     def send_text(self, chat_id, text):
         self.telegram_bot_client.send_message(chat_id, text)
@@ -56,6 +62,9 @@ class Bot:
     def handle_message(self, msg):
         logger.info(f'Incoming message: {msg}')
         self.send_text(msg['chat']['id'], f'Your original message: {msg["text"]}')
+
+    def upload_to_s3(self, local_path, s3_path):
+        self.s3.upload_file(local_path, self.bucket_name, s3_path)
 
 
 class QuoteBot(Bot):
@@ -113,7 +122,7 @@ class ImageProcessingBot(Bot):
                 return
 
             if caption == 'yolo':
-                self.apply_yolo(chat_id, photo_path)
+                self.apply_yolo(msg, photo_path)
             else:
                 self.apply_filter_from_caption(chat_id, photo_path, caption)
             return
@@ -183,16 +192,28 @@ class ImageProcessingBot(Bot):
             logger.error(f"Error applying filter: {e}")
             self.send_text(chat_id, "An error occurred while applying the filter.")
 
-    def apply_yolo(self, chat_id, photo_path):
+    def apply_yolo(self, msg, photo_path):
         try:
-            with open(photo_path, 'rb') as image_file:
-                response = requests.post(
-                    f"{self.yolo_service_url}/predict",
-                    files={'file': image_file}
-                )
-                response.raise_for_status()
-                result = response.json()
-                logger.info(f"YOLO raw response: {result}")
+            chat_id = msg['chat']['id']
+            from_id = msg.get('from', {}).get('id')
+            telegram_user_id = str(from_id if from_id is not None else chat_id)
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+
+            s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
+            self.upload_to_s3(photo_path, s3_key)
+            logger.info(f"[Polybot] Uploaded to: {s3_key}")
+
+            response = requests.post(
+                f"{self.yolo_service_url}/predict",
+                data={
+                    'user_id': telegram_user_id,
+                    'timestamp': timestamp
+                }
+            )
+
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"YOLO response: {result}")
 
             labels = result.get("labels", [])
             if not labels:
@@ -205,5 +226,3 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
             self.send_text(chat_id, "Failed to process image with YOLO.")
-
-
