@@ -231,3 +231,4 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
             self.send_text(chat_id, "Failed to process image with YOLO.")
+
