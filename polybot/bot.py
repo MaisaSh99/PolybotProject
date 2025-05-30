@@ -215,8 +215,12 @@ class ImageProcessingBot(Bot):
             logger.info(f"🖼️ Using downloaded photo at: {photo_path}")
 
             s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
+            logger.info(f"📂 About to upload to S3: local_path={photo_path}, s3_key={s3_key}")
+
             self.upload_to_s3(photo_path, s3_key)
-            logger.info(f"[Polybot] Uploaded to: {s3_key}")
+
+            logger.info(f"[Polybot] Upload finished or skipped. Proceeding to YOLO prediction.")
+            logger.info(f"📡 Sending prediction request to {self.yolo_service_url}/predict")
 
             response = requests.post(
                 f"{self.yolo_service_url}/predict",
@@ -241,3 +245,4 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
             self.send_text(chat_id, "Failed to process image with YOLO.")
+
