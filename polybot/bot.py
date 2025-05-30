@@ -147,6 +147,11 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "The 'concat' filter works only on two photos.")
                 return
             self._apply_concat(chat_id, photos)
+
+        elif filter_name == 'yolo':
+            self.send_text(chat_id, "YOLO does not support grouped images. Please send one photo at a time.")
+            return
+
         else:
             self.send_text(chat_id, f"Unknown group filter '{filter_name}'.")
 
