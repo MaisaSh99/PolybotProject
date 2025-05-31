@@ -239,7 +239,7 @@ class ImageProcessingBot(Bot):
             file_size = os.path.getsize(photo_path)
             logger.info(f"📏 Original photo size: {file_size} bytes")
 
-            # Upload original image to S3
+            # Upload original image to S3 with the correct path format
             original_s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
             logger.info(f"📂 Attempting to upload original image to s3://{self.bucket_name}/{original_s3_key}")
             try:
@@ -257,10 +257,12 @@ class ImageProcessingBot(Bot):
             try:
                 with open(photo_path, 'rb') as f:
                     files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
+                    headers = {'X-User-ID': telegram_user_id}
                     logger.info(f"📤 Sending file to YOLO service: {os.path.basename(photo_path)}")
                     response = requests.post(
                         f"{self.yolo_service_url}/predict",
-                        files=files
+                        files=files,
+                        headers=headers
                     )
                     logger.info(f"📥 YOLO service response status: {response.status_code}")
             except Exception as e:
@@ -295,7 +297,7 @@ class ImageProcessingBot(Bot):
                             f.write(predicted_response.content)
                         logger.info(f"✅ Predicted image saved temporarily at: {predicted_path}")
                         
-                        # Upload predicted image to S3
+                        # Upload predicted image to S3 with the correct path format
                         predicted_s3_key = f"predicted/{telegram_user_id}/{timestamp}_predicted.jpg"
                         logger.info(f"📂 Uploading predicted image to s3://{self.bucket_name}/{predicted_s3_key}")
                         try:
