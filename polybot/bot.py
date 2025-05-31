@@ -130,20 +130,12 @@ class ImageProcessingBot(Bot):
         logger.info(f"🧪 Entered apply_yolo() with photo_path={photo_path}")
 
         chat_id = msg['chat']['id']
-        telegram_user_id = str(msg.get('from', {}).get('id', chat_id))
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-
-        # ✅ Use chat_id in S3 key
-        s3_key = f"original/{chat_id}/{timestamp}.jpg"
-        logger.info(f"🪪 Uploading original photo to: {s3_key}")
-        logger.info("🧪 About to call upload_to_s3")
-
-        # self.upload_to_s3(photo_path, s3_key)
 
         try:
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
-                headers = {'X-User-ID': str(chat_id)}  # ✅ Fix: send chat_id instead of telegram_user_id
+                headers = {'x-user-id': str(chat_id)}  # ✅ Use lowercase header
 
                 response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
                 logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
