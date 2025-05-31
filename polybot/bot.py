@@ -135,20 +135,12 @@ class ImageProcessingBot(Bot):
         try:
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
-                headers = {'X-User-ID': str(chat_id)}
+                headers = {'x-user-id': str(chat_id)}
 
                 response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
                 logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
-                
-                if response.status_code != 200:
-                    self.send_text(chat_id, "❌ Failed to process image. Please try again.")
-                    return
-                
+                response.raise_for_status()
                 result = response.json()
-                
-                if "error" in result:
-                    self.send_text(chat_id, f"❌ Error: {result['error']}")
-                    return
 
             labels = result.get("labels", [])
             if labels:
@@ -179,8 +171,6 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.exception(f"❌ YOLO processing failed: {e}")
             self.send_text(chat_id, "❌ Failed to process image with YOLO.")
-            if os.path.exists(photo_path):
-                os.remove(photo_path)
 
     def test_s3_connection(self, chat_id):
         try:
