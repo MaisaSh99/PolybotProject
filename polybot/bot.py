@@ -136,47 +136,35 @@ class ImageProcessingBot(Bot):
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
                 headers = {'X-User-ID': str(chat_id)}
-                logger.info(f"📤 Sending request to YOLO service with headers: {headers}")
 
                 response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
                 logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
                 response.raise_for_status()
                 result = response.json()
-                logger.info(f"📥 Parsed YOLO response: {result}")
 
             labels = result.get("labels", [])
             if labels:
                 unique_labels = sorted(set(labels))
-                logger.info(f"📝 Sending detected objects: {unique_labels}")
                 self.send_text(chat_id, "✅ Detected objects:\n" + "\n".join(unique_labels))
             else:
-                logger.info("🤖 No objects detected")
                 self.send_text(chat_id, "🤖 No objects detected.")
 
             prediction_uid = result.get("prediction_uid")
             if prediction_uid:
-                logger.info(f"🖼️ Getting predicted image for uid: {prediction_uid}")
                 image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
                 pred_image = requests.get(image_url)
-                logger.info(f"📥 Predicted image response: {pred_image.status_code}")
 
                 if pred_image.status_code == 200:
                     pred_path = f"/tmp/predicted_{timestamp}.jpg"
                     with open(pred_path, 'wb') as f:
                         f.write(pred_image.content)
-                    logger.info(f"💾 Saved predicted image to: {pred_path}")
 
                     pred_s3_key = f"predicted/{chat_id}/{timestamp}_predicted.jpg"
                     logger.info(f"📤 Uploading predicted photo to: {pred_s3_key}")
                     self.upload_to_s3(pred_path, pred_s3_key)
 
-                    logger.info(f"📤 Sending predicted image to chat {chat_id}")
                     self.send_photo(chat_id, pred_path)
                     os.remove(pred_path)
-                else:
-                    logger.error(f"❌ Failed to get predicted image: {pred_image.status_code} {pred_image.text}")
-            else:
-                logger.warning("⚠️ No prediction_uid in response")
 
             os.remove(photo_path)
 
