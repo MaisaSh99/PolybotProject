@@ -131,20 +131,26 @@ class ImageProcessingBot(Bot):
 
         chat_id = msg['chat']['id']
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+        logger.info(f"👤 Chat ID: {chat_id}")
 
         try:
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
-                headers = {'X-User-ID': str(chat_id)}
+                headers = {
+                    'X-User-ID': str(chat_id),
+                    'Content-Type': 'multipart/form-data'
+                }
                 logger.info(f"📤 Sending request to YOLO service with headers: {headers}")
 
                 response = requests.post(
                     f"{self.yolo_service_url}/predict",
                     files=files,
                     headers=headers,
-                    timeout=30  # Add timeout
+                    timeout=30
                 )
-                logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
+                logger.info(f"🎯 YOLO response status: {response.status_code}")
+                logger.info(f"🎯 YOLO response headers: {dict(response.headers)}")
+                logger.info(f"🎯 YOLO response body: {response.text}")
                 response.raise_for_status()
                 result = response.json()
 
@@ -177,6 +183,9 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.exception(f"❌ YOLO processing failed: {e}")
             self.send_text(chat_id, "❌ Failed to process image with YOLO.")
+            # Clean up the photo file in case of error
+            if os.path.exists(photo_path):
+                os.remove(photo_path)
 
     def test_s3_connection(self, chat_id):
         try:
