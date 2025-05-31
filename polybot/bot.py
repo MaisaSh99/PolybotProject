@@ -256,15 +256,18 @@ class ImageProcessingBot(Bot):
             # Open the file and send it as a multipart form
             try:
                 with open(photo_path, 'rb') as f:
-                    files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
+                    file_content = f.read()
+                    logger.info(f"📤 Read {len(file_content)} bytes from photo file")
+                    files = {'file': (f"{telegram_user_id}_{timestamp}.jpg", file_content, 'image/jpeg')}
                     headers = {'X-User-ID': telegram_user_id}
-                    logger.info(f"📤 Sending file to YOLO service: {os.path.basename(photo_path)}")
+                    logger.info(f"📤 Sending file to YOLO service with headers: {headers}")
                     response = requests.post(
                         f"{self.yolo_service_url}/predict",
                         files=files,
                         headers=headers
                     )
                     logger.info(f"📥 YOLO service response status: {response.status_code}")
+                    logger.info(f"📥 YOLO service response: {response.text}")
             except Exception as e:
                 logger.error(f"❌ Failed to send file to YOLO service: {e}")
                 self.send_text(chat_id, "Error: Failed to process image with YOLO service.")
