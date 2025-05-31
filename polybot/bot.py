@@ -140,7 +140,7 @@ class ImageProcessingBot(Bot):
         try:
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
-                headers = {'x-user-id': str(chat_id)}
+                headers = {'X-User-Id': str(chat_id)}
 
                 response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
                 logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
