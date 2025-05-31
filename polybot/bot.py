@@ -76,7 +76,8 @@ class ImageProcessingBot(Bot):
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
-        logger.info(f'📩 Incoming message: {msg}')
+        message_id = msg.get('message_id')
+        logger.info(f'📩 Incoming message_id={message_id}, chat_id={chat_id}')
 
         if 'text' in msg:
             text = msg['text'].strip().lower()
@@ -142,7 +143,7 @@ class ImageProcessingBot(Bot):
         try:
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
-                headers = {'X-User-ID': telegram_user_id}
+                headers = {'X-User-ID': str(chat_id)}  # ✅ Fix: send chat_id instead of telegram_user_id
 
                 response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
                 logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
@@ -165,7 +166,7 @@ class ImageProcessingBot(Bot):
                     with open(pred_path, 'wb') as f:
                         f.write(pred_image.content)
 
-                    pred_s3_key = f"predicted/{telegram_user_id}/{timestamp}_predicted.jpg"
+                    pred_s3_key = f"predicted/{chat_id}/{timestamp}_predicted.jpg"
                     logger.info(f"📤 Uploading predicted photo to: {pred_s3_key}")
                     self.upload_to_s3(pred_path, pred_s3_key)
 
