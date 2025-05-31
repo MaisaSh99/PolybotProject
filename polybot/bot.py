@@ -97,10 +97,11 @@ class Bot:
 
 
 class ImageProcessingBot(Bot):
-    def __init__(self, token, telegram_chat_url, yolo_service_url='http://localhost:8080'):
+    def __init__(self, token, telegram_chat_url, yolo_service_url='http://127.0.0.1:8080'):
         super().__init__(token, telegram_chat_url)
         self.media_groups = {}
         self.yolo_service_url = yolo_service_url
+        logger.info(f"🔗 YOLO service URL: {self.yolo_service_url}")
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
