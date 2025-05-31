@@ -138,7 +138,7 @@ class ImageProcessingBot(Bot):
         logger.info(f"🪪 Uploading original photo to: {s3_key}")
         logger.info("🧪 About to call upload_to_s3")
 
-        self.upload_to_s3(photo_path, s3_key)
+        # self.upload_to_s3(photo_path, s3_key)
 
         try:
             with open(photo_path, 'rb') as f:
