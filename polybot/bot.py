@@ -125,7 +125,13 @@ class ImageProcessingBot(Bot):
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
             s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
+
+            logger.info(f"🪪 Preparing to upload original photo for user {telegram_user_id} at {timestamp}")
+            logger.info(f"🪪 Calling upload_to_s3 with: local_path={photo_path}, s3_path={s3_key}")
+
             self.upload_to_s3(photo_path, s3_key)
+
+            logger.info(f"✅ upload_to_s3 completed for original image: {s3_key}")
 
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
@@ -153,7 +159,11 @@ class ImageProcessingBot(Bot):
                         f.write(pred_image.content)
 
                     pred_s3_key = f"predicted/{telegram_user_id}/{timestamp}_predicted.jpg"
+
+                    logger.info(f"📥 Uploading predicted image to S3: {pred_s3_key}")
                     self.upload_to_s3(pred_path, pred_s3_key)
+                    logger.info(f"✅ upload_to_s3 completed for predicted image: {pred_s3_key}")
+
                     self.send_photo(chat_id, pred_path)
                     os.remove(pred_path)
                     os.remove(photo_path)
