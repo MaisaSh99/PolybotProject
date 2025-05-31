@@ -37,7 +37,7 @@ class Bot:
         self.telegram_bot_client.send_photo(chat_id, InputFile(img_path))
 
     def upload_to_s3(self, local_path, s3_path):
-        logger.info(f"📄 Uploading {local_path} to s3://{self.bucket_name}/{s3_path}")
+        logger.info(f"📤 Starting S3 upload: {local_path} -> s3://{self.bucket_name}/{s3_path}")
 
         try:
             if not os.path.exists(local_path):
@@ -51,12 +51,21 @@ class Bot:
                 logger.error(f"❌ File is empty: {local_path}")
                 return
 
+            logger.info("📤 Uploading to S3 with boto3...")
             self.s3.upload_file(local_path, self.bucket_name, s3_path)
-            logger.info("✅ Upload successful")
+            logger.info(f"✅ Upload successful! File: {s3_path}")
+
+            # Immediately list objects to verify
+            result = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=s3_path)
+            contents = result.get("Contents", [])
+            if contents:
+                logger.info(f"🧾 Confirmed S3 object exists: {contents[0]['Key']} ({contents[0]['Size']} bytes)")
+            else:
+                logger.warning("⚠️ Upload claimed success but object not found in list_objects!")
 
         except Exception as e:
-            logger.error(f"❌ Upload to S3 failed: {e}")
-            raise
+            logger.exception(f"❌ Upload to S3 failed: {e}")
+
 
 class ImageProcessingBot(Bot):
     def __init__(self, token, telegram_chat_url, yolo_service_url='http://localhost:8080'):
