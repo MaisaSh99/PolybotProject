@@ -93,6 +93,7 @@ class ImageProcessingBot(Bot):
 
         try:
             photo_path = self.download_user_photo(msg)
+            logger.info(f"🧪 Returning photo path from download_user_photo(): {photo_path}")
         except Exception as e:
             self.send_text(chat_id, f"❌ Failed to download image: {e}")
             return
@@ -123,12 +124,15 @@ class ImageProcessingBot(Bot):
         return full_path
 
     def apply_yolo(self, msg, photo_path):
+        logger.info(f"🧪 Entered apply_yolo() with photo_path={photo_path}")
+
         chat_id = msg['chat']['id']
         telegram_user_id = str(msg.get('from', {}).get('id', chat_id))
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
         s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
         logger.info(f"🪪 Uploading original photo to: {s3_key}")
+        logger.info("🧪 About to call upload_to_s3")
 
         self.upload_to_s3(photo_path, s3_key)
 
