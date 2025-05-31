@@ -223,13 +223,13 @@ class ImageProcessingBot(Bot):
             logger.info(f"[Polybot] Upload finished or skipped. Proceeding to YOLO prediction.")
             logger.info(f"📡 Sending prediction request to {self.yolo_service_url}/predict")
 
-            response = requests.post(
-                f"{self.yolo_service_url}/predict",
-                data={
-                    'user_id': telegram_user_id,
-                    'timestamp': timestamp
-                }
-            )
+            # Open the file and send it as a multipart form
+            with open(photo_path, 'rb') as f:
+                files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
+                response = requests.post(
+                    f"{self.yolo_service_url}/predict",
+                    files=files
+                )
 
             response.raise_for_status()
             result = response.json()
@@ -242,6 +242,21 @@ class ImageProcessingBot(Bot):
 
             result_text = "Detected objects:\n" + "\n".join(labels)
             self.send_text(chat_id, result_text)
+
+            # Get and send the predicted image
+            prediction_uid = result.get("prediction_uid")
+            if prediction_uid:
+                predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
+                predicted_response = requests.get(predicted_image_url)
+                if predicted_response.status_code == 200:
+                    # Save the predicted image temporarily
+                    predicted_path = f"/tmp/predicted_{timestamp}.jpg"
+                    with open(predicted_path, 'wb') as f:
+                        f.write(predicted_response.content)
+                    # Send the predicted image back to the user
+                    self.send_photo(chat_id, predicted_path)
+                    # Clean up
+                    os.remove(predicted_path)
 
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
