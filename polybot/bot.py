@@ -57,19 +57,24 @@ class ImageProcessingBot(Bot):
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
         message_id = msg.get('message_id')
-        unique_id = f"{chat_id}:{message_id}"
 
-        # Deduplication logic
-        if message_id:
-            if unique_id in self.processed_messages:
-                logger.warning(f"⚠️ Duplicate message ignored: {unique_id}")
-                return
-            self.processed_messages.add(unique_id)
-            if len(self.processed_messages) > 1000:
-                self.processed_messages = set(list(self.processed_messages)[-500:])
+        if message_id is None:
+            logger.warning("⚠️ No message_id, skipping deduplication")
+            return
 
-        logger.info(f"📩 Handling message {unique_id}")
+        unique_key = f"{chat_id}:{message_id}"
+        if unique_key in self.processed_messages:
+            logger.warning(f"⚠️ Duplicate message received: {unique_key}, skipping.")
+            return
 
+        self.processed_messages.add(unique_key)
+        if len(self.processed_messages) > 1000:
+            # Limit memory use
+            self.processed_messages = set(list(self.processed_messages)[-500:])
+
+        logger.info(f"📩 Processing new message: {unique_key}")
+
+        # Now proceed with regular logic
         if 'text' in msg:
             text = msg['text'].strip().lower()
             if text == 'hi':
@@ -80,7 +85,7 @@ class ImageProcessingBot(Bot):
                 return
 
         if 'photo' not in msg:
-            self.send_text(chat_id, "📷 Please send a photo with a caption like 'yolo'.")
+            self.send_text(chat_id, "📷 Please send a photo with a caption like 'yolo'")
             return
 
         try:
@@ -102,10 +107,10 @@ class ImageProcessingBot(Bot):
                 finally:
                     self.processing_lock.release()
             else:
-                logger.warning("⚠️ Another image is being processed.")
-                self.send_text(chat_id, "⏳ Please wait, I'm still processing the previous image.")
+                logger.warning("⚠️ YOLO already running, skipping.")
+                self.send_text(chat_id, "⏳ Processing another image. Please wait.")
         else:
-            self.send_text(chat_id, f"❓ Unknown filter '{caption}'. Try 'yolo'.")
+            self.send_text(chat_id, f"❓ Unknown caption '{caption}'. Try 'yolo'.")
 
     def download_user_photo(self, msg):
         file_id = msg['photo'][-1]['file_id']
