@@ -103,6 +103,7 @@ class ImageProcessingBot(Bot):
     def download_user_photo(self, msg):
         try:
             file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
+            logger.info(f"📥 Telegram file path: {file_info.file_path}")
             data = self.telegram_bot_client.download_file(file_info.file_path)
 
             folder = file_info.file_path.split('/')[0]
@@ -112,11 +113,18 @@ class ImageProcessingBot(Bot):
             with open(full_path, 'wb') as f:
                 f.write(data)
 
-            logger.info(f"✅ Saved image: {full_path}")
+            if os.path.exists(full_path):
+                size = os.path.getsize(full_path)
+                logger.info(f"✅ Image saved to: {full_path} (Size: {size} bytes)")
+            else:
+                logger.warning(f"⚠️ File was supposed to be saved to {full_path}, but does not exist.")
+                os.system(f"ls -l {folder}")  # Show contents of directory
+
             return full_path
         except Exception as e:
             logger.error(f"❌ Download failed: {e}")
             raise
+
 
     def apply_yolo(self, msg, photo_path):
         try:
