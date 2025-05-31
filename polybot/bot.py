@@ -109,7 +109,9 @@ class ImageProcessingBot(Bot):
             self.send_text(chat_id, f"❓ Unknown caption '{caption}'. Try 'yolo'.")
 
     def download_user_photo(self, msg):
-        file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
+        file_id = msg['photo'][-1]['file_id']
+        logger.info(f"📸 file_id: {file_id}")
+        file_info = self.telegram_bot_client.get_file(file_id)
         logger.info(f"📥 Telegram file path: {file_info.file_path}")
         data = self.telegram_bot_client.download_file(file_info.file_path)
 
@@ -130,7 +132,8 @@ class ImageProcessingBot(Bot):
         telegram_user_id = str(msg.get('from', {}).get('id', chat_id))
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-        s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
+        # ✅ Use chat_id in S3 key
+        s3_key = f"original/{chat_id}/{timestamp}.jpg"
         logger.info(f"🪪 Uploading original photo to: {s3_key}")
         logger.info("🧪 About to call upload_to_s3")
 
