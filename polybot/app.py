@@ -1,3 +1,4 @@
+import logger
 import flask
 from flask import request
 import os
@@ -16,8 +17,10 @@ def index():
 @app.route(f'/{TELEGRAM_BOT_TOKEN}/', methods=['POST'])
 def webhook():
     req = request.get_json()
+    logger.info(f"📨 Webhook received: message_id={req.get('message', {}).get('message_id')}")
     bot.handle_message(req['message'])
     return 'Ok'
+
 
 if __name__ == "__main__":
     bot = ImageProcessingBot(TELEGRAM_BOT_TOKEN, BOT_APP_URL, YOLO_SERVICE_URL)
