@@ -22,6 +22,7 @@ class Bot:
         self.bucket_name = os.getenv('S3_BUCKET_NAME') or 'maisa-polybot-images'
         logger.info(f"🪣 Using S3 bucket: {self.bucket_name}")
         self.s3 = boto3.client('s3', region_name='us-east-2')
+        self.s3.upload_file('/tmp/test.jpg', 'maisa-dev-bucket', 'beatles.jpeg')
 
     def send_text(self, chat_id, text):
         self.telegram_bot_client.send_message(chat_id, text)
@@ -80,22 +81,11 @@ class Bot:
                 logger.error(f"❌ File is empty: {local_path}")
                 return
 
-            logger.info(f"🔑 Using AWS region: us-east-2")
-            logger.info(f"🔑 Using bucket: {self.bucket_name}")
-            
             self.s3.upload_file(local_path, self.bucket_name, s3_path)
             logger.info("✅ Upload successful")
-            
-            try:
-                self.s3.head_object(Bucket=self.bucket_name, Key=s3_path)
-                logger.info(f"✅ Verified file exists in S3: s3://{self.bucket_name}/{s3_path}")
-            except Exception as e:
-                logger.error(f"❌ File verification failed: {e}")
 
         except Exception as e:
             logger.error(f"❌ Upload to S3 failed: {e}")
-            logger.error(f"❌ Error type: {type(e).__name__}")
-            logger.error(f"❌ Error details: {str(e)}")
 
 
 class ImageProcessingBot(Bot):
