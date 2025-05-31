@@ -9,6 +9,7 @@ from polybot.img_proc import Img
 import boto3
 from datetime import datetime
 
+
 class Bot:
     def __init__(self, token, telegram_chat_url):
         self.telegram_bot_client = telebot.TeleBot(token)
@@ -33,7 +34,9 @@ class Bot:
 
     def send_photo(self, chat_id, img_path):
         if not os.path.exists(img_path):
-            raise RuntimeError("Image path doesn't exist")
+            logger.error(f"❌ Tried to send non-existing photo: {img_path}")
+            self.send_text(chat_id, "Image not found.")
+            return
         self.telegram_bot_client.send_photo(chat_id, InputFile(img_path))
 
     def upload_to_s3(self, local_path, s3_path):
@@ -55,7 +58,6 @@ class Bot:
             self.s3.upload_file(local_path, self.bucket_name, s3_path)
             logger.info(f"✅ Upload successful! File: {s3_path}")
 
-            # Immediately list objects to verify
             result = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=s3_path)
             contents = result.get("Contents", [])
             if contents:
@@ -74,7 +76,7 @@ class ImageProcessingBot(Bot):
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
-        logger.info(f'Incoming message: {msg}')
+        logger.info(f'📩 Incoming message: {msg}')
 
         if 'text' in msg:
             text = msg['text'].strip().lower()
@@ -86,75 +88,65 @@ class ImageProcessingBot(Bot):
                 return
 
         if 'photo' not in msg:
-            self.send_text(chat_id, "Please send a photo with a caption indicating the filter to apply.")
+            self.send_text(chat_id, "📷 Please send a photo with a caption like 'yolo'")
             return
 
-        photo_path = self.download_user_photo(msg)
+        try:
+            photo_path = self.download_user_photo(msg)
+        except Exception as e:
+            self.send_text(chat_id, f"❌ Failed to download image: {e}")
+            return
+
         caption = msg.get('caption', '').strip().lower()
         if not caption:
-            self.send_text(chat_id, "You need to choose a filter.")
+            self.send_text(chat_id, "📌 You need to choose a filter like 'yolo'.")
             return
 
         if caption == 'yolo':
             self.apply_yolo(msg, photo_path)
         else:
-            self.send_text(chat_id, f"Unknown caption '{caption}'. Try 'yolo'.")
+            self.send_text(chat_id, f"❓ Unknown caption '{caption}'. Try 'yolo'.")
 
     def download_user_photo(self, msg):
-        try:
-            file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
-            logger.info(f"📥 Telegram file path: {file_info.file_path}")
-            data = self.telegram_bot_client.download_file(file_info.file_path)
+        file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
+        logger.info(f"📥 Telegram file path: {file_info.file_path}")
+        data = self.telegram_bot_client.download_file(file_info.file_path)
 
-            folder = file_info.file_path.split('/')[0]
-            os.makedirs(folder, exist_ok=True)
-            full_path = file_info.file_path
+        folder = file_info.file_path.split('/')[0]
+        os.makedirs(folder, exist_ok=True)
+        full_path = os.path.abspath(file_info.file_path)
 
-            with open(full_path, 'wb') as f:
-                f.write(data)
+        with open(full_path, 'wb') as f:
+            f.write(data)
 
-            if os.path.exists(full_path):
-                size = os.path.getsize(full_path)
-                logger.info(f"✅ Image saved to: {os.path.abspath(full_path)} (Size: {size} bytes)")
-            else:
-                logger.warning(f"⚠️ File was supposed to be saved to {full_path}, but does not exist.")
-                os.system(f"ls -l {folder}")  # Show contents of directory
-
-            return full_path
-        except Exception as e:
-            logger.error(f"❌ Download failed: {e}")
-            raise
-
+        logger.info(f"✅ Image saved to: {full_path}")
+        return full_path
 
     def apply_yolo(self, msg, photo_path):
+        chat_id = msg['chat']['id']
+        telegram_user_id = str(msg.get('from', {}).get('id', chat_id))
+        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+
+        s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
+        logger.info(f"🪪 Uploading original photo to: {s3_key}")
+
+        self.upload_to_s3(photo_path, s3_key)
+
         try:
-            chat_id = msg['chat']['id']
-            telegram_user_id = str(msg.get('from', {}).get('id', chat_id))
-            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-
-            s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
-
-            logger.info(f"🪪 Preparing to upload original photo for user {telegram_user_id} at {timestamp}")
-            logger.info(f"🪪 Calling upload_to_s3 with: local_path={photo_path}, s3_path={s3_key}")
-
-            self.upload_to_s3(photo_path, s3_key)
-
-            logger.info(f"✅ upload_to_s3 completed for original image: {s3_key}")
-
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
                 headers = {'X-User-ID': telegram_user_id}
 
                 response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
-                logger.info(f"YOLO response: {response.status_code} {response.text}")
+                logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
                 response.raise_for_status()
                 result = response.json()
 
             labels = result.get("labels", [])
             if labels:
-                self.send_text(chat_id, "Detected objects:\n" + "\n".join(labels))
+                self.send_text(chat_id, "✅ Detected objects:\n" + "\n".join(labels))
             else:
-                self.send_text(chat_id, "No objects detected.")
+                self.send_text(chat_id, "🤖 No objects detected.")
 
             prediction_uid = result.get("prediction_uid")
             if prediction_uid:
@@ -167,18 +159,17 @@ class ImageProcessingBot(Bot):
                         f.write(pred_image.content)
 
                     pred_s3_key = f"predicted/{telegram_user_id}/{timestamp}_predicted.jpg"
-
-                    logger.info(f"📥 Uploading predicted image to S3: {pred_s3_key}")
+                    logger.info(f"📤 Uploading predicted photo to: {pred_s3_key}")
                     self.upload_to_s3(pred_path, pred_s3_key)
-                    logger.info(f"✅ upload_to_s3 completed for predicted image: {pred_s3_key}")
 
                     self.send_photo(chat_id, pred_path)
                     os.remove(pred_path)
-                    os.remove(photo_path)
+
+            os.remove(photo_path)
 
         except Exception as e:
-            logger.error(f"❌ YOLO failed: {e}")
-            self.send_text(chat_id, "Failed to process image with YOLO.")
+            logger.exception(f"❌ YOLO processing failed: {e}")
+            self.send_text(chat_id, "❌ Failed to process image with YOLO.")
 
     def test_s3_connection(self, chat_id):
         try:
@@ -190,5 +181,5 @@ class ImageProcessingBot(Bot):
             os.remove(path)
             self.send_text(chat_id, "✅ S3 upload test successful.")
         except Exception as e:
-            logger.error(f"S3 test failed: {e}")
+            logger.error(f"❌ S3 test failed: {e}")
             self.send_text(chat_id, f"❌ S3 test failed: {e}")
