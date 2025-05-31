@@ -47,16 +47,22 @@ class Bot:
 
         try:
             file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
+            logger.info(f"📥 Got file info: {file_info.file_path}")
+            
             data = self.telegram_bot_client.download_file(file_info.file_path)
+            logger.info(f"📥 Downloaded file size: {len(data)} bytes")
+            
             folder_name = file_info.file_path.split('/')[0]
+            logger.info(f"📁 Will save to folder: {folder_name}")
 
             if not os.path.exists(folder_name):
+                logger.info(f"📁 Creating folder: {folder_name}")
                 os.makedirs(folder_name)
 
             with open(file_info.file_path, 'wb') as photo:
                 photo.write(data)
+                logger.info(f"✅ Photo saved locally: {file_info.file_path}")
 
-            logger.info(f"✅ Photo saved locally: {file_info.file_path}")
             return file_info.file_path
         except OSError as e:
             logger.error(f"❌ File saving error: {e}")
@@ -74,7 +80,7 @@ class Bot:
         self.send_text(msg['chat']['id'], f'Your original message: {msg["text"]}')
 
     def upload_to_s3(self, local_path, s3_path):
-        logger.info(f"📤 Uploading {local_path} to s3://{self.bucket_name}/{s3_path}")
+        logger.info(f"📤 Starting S3 upload: {local_path} -> s3://{self.bucket_name}/{s3_path}")
 
         try:
             logger.info("🔍 Checking if file exists and is not empty...")
@@ -89,19 +95,20 @@ class Bot:
                 logger.error(f"❌ File is empty: {local_path}")
                 return
 
+            logger.info(f"📤 Uploading to S3: s3://{self.bucket_name}/{s3_path}")
             self.s3.upload_file(local_path, self.bucket_name, s3_path)
             logger.info("✅ Upload successful")
 
         except Exception as e:
             logger.error(f"❌ Upload to S3 failed: {e}")
+            raise
 
 
 class ImageProcessingBot(Bot):
-    def __init__(self, token, telegram_chat_url, yolo_service_url='http://127.0.0.1:8080'):
+    def __init__(self, token, telegram_chat_url, yolo_service_url='http://localhost:8080'):
         super().__init__(token, telegram_chat_url)
         self.media_groups = {}
         self.yolo_service_url = yolo_service_url
-        logger.info(f"🔗 YOLO service URL: {self.yolo_service_url}")
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
@@ -257,11 +264,9 @@ class ImageProcessingBot(Bot):
             # Open the file and send it as a multipart form
             try:
                 with open(photo_path, 'rb') as f:
-                    file_content = f.read()
-                    logger.info(f"📤 Read {len(file_content)} bytes from photo file")
-                    files = {'file': (f"{telegram_user_id}_{timestamp}.jpg", file_content, 'image/jpeg')}
+                    files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
                     headers = {'X-User-ID': telegram_user_id}
-                    logger.info(f"📤 Sending file to YOLO service with headers: {headers}")
+                    logger.info(f"📤 Sending file to YOLO service: {os.path.basename(photo_path)}")
                     response = requests.post(
                         f"{self.yolo_service_url}/predict",
                         files=files,
