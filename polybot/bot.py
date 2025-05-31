@@ -136,8 +136,14 @@ class ImageProcessingBot(Bot):
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
                 headers = {'X-User-ID': str(chat_id)}
+                logger.info(f"📤 Sending request to YOLO service with headers: {headers}")
 
-                response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
+                response = requests.post(
+                    f"{self.yolo_service_url}/predict",
+                    files=files,
+                    headers=headers,
+                    timeout=30  # Add timeout
+                )
                 logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
                 response.raise_for_status()
                 result = response.json()
