@@ -54,16 +54,8 @@ class Bot:
                 logger.error(f"❌ File is empty: {local_path}")
                 return
 
-            logger.info("📤 Uploading to S3 with boto3...")
             self.s3.upload_file(local_path, self.bucket_name, s3_path)
             logger.info(f"✅ Upload successful! File: {s3_path}")
-
-            result = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=s3_path)
-            contents = result.get("Contents", [])
-            if contents:
-                logger.info(f"🧾 Confirmed S3 object exists: {contents[0]['Key']} ({contents[0]['Size']} bytes)")
-            else:
-                logger.warning("⚠️ Upload claimed success but object not found in list_objects!")
 
         except Exception as e:
             logger.exception(f"❌ Upload to S3 failed: {e}")
@@ -73,11 +65,18 @@ class ImageProcessingBot(Bot):
     def __init__(self, token, telegram_chat_url, yolo_service_url='http://localhost:8080'):
         super().__init__(token, telegram_chat_url)
         self.yolo_service_url = yolo_service_url
+        self.processing_lock = threading.Lock()
+        self.processed_messages = set()
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
         message_id = msg.get('message_id')
         logger.info(f'📩 Incoming message_id={message_id}, chat_id={chat_id}')
+
+        if message_id in self.processed_messages:
+            logger.warning(f"⚠️ Skipping already processed message_id={message_id}")
+            return
+        self.processed_messages.add(message_id)
 
         if 'text' in msg:
             text = msg['text'].strip().lower()
@@ -105,7 +104,13 @@ class ImageProcessingBot(Bot):
             return
 
         if caption == 'yolo':
-            self.apply_yolo(msg, photo_path)
+            if self.processing_lock.acquire(blocking=False):
+                try:
+                    self.apply_yolo(msg, photo_path)
+                finally:
+                    self.processing_lock.release()
+            else:
+                logger.warning("⚠️ YOLO call blocked by another running task.")
         else:
             self.send_text(chat_id, f"❓ Unknown caption '{caption}'. Try 'yolo'.")
 
