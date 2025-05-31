@@ -115,7 +115,7 @@ class ImageProcessingBot(Bot):
 
             if os.path.exists(full_path):
                 size = os.path.getsize(full_path)
-                logger.info(f"✅ Image saved to: {full_path} (Size: {size} bytes)")
+                logger.info(f"✅ Image saved to: {os.path.abspath(full_path)} (Size: {size} bytes)")
             else:
                 logger.warning(f"⚠️ File was supposed to be saved to {full_path}, but does not exist.")
                 os.system(f"ls -l {folder}")  # Show contents of directory
