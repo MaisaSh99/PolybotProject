@@ -131,70 +131,58 @@ class ImageProcessingBot(Bot):
 
         chat_id = msg['chat']['id']
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        logger.info(f"👤 Chat ID: {chat_id}")
 
         try:
             with open(photo_path, 'rb') as f:
                 files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
-                headers = {
-                    'X-User-ID': str(chat_id),
-                    'Accept': 'application/json'
-                }
+                headers = {'X-User-ID': str(chat_id)}
                 logger.info(f"📤 Sending request to YOLO service with headers: {headers}")
 
-                response = requests.post(
-                    f"{self.yolo_service_url}/predict",
-                    files=files,
-                    headers=headers,
-                    timeout=30
-                )
-                logger.info(f"🎯 YOLO response status: {response.status_code}")
-                logger.info(f"🎯 YOLO response headers: {dict(response.headers)}")
-                logger.info(f"🎯 YOLO response body: {response.text}")
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    
-                    # Check if this is a duplicate response
-                    if "message" in result and result["message"] == "Request already processed":
-                        logger.info("🔄 Received duplicate response, ignoring")
-                        return
+                response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
+                logger.info(f"🎯 YOLO response: {response.status_code} {response.text}")
+                response.raise_for_status()
+                result = response.json()
+                logger.info(f"📥 Parsed YOLO response: {result}")
 
-                    labels = result.get("labels", [])
-                    if labels:
-                        unique_labels = sorted(set(labels))
-                        self.send_text(chat_id, "✅ Detected objects:\n" + "\n".join(unique_labels))
-                    else:
-                        self.send_text(chat_id, "🤖 No objects detected.")
+            labels = result.get("labels", [])
+            if labels:
+                unique_labels = sorted(set(labels))
+                logger.info(f"📝 Sending detected objects: {unique_labels}")
+                self.send_text(chat_id, "✅ Detected objects:\n" + "\n".join(unique_labels))
+            else:
+                logger.info("🤖 No objects detected")
+                self.send_text(chat_id, "🤖 No objects detected.")
 
-                    prediction_uid = result.get("prediction_uid")
-                    if prediction_uid:
-                        image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
-                        pred_image = requests.get(image_url)
+            prediction_uid = result.get("prediction_uid")
+            if prediction_uid:
+                logger.info(f"🖼️ Getting predicted image for uid: {prediction_uid}")
+                image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
+                pred_image = requests.get(image_url)
+                logger.info(f"📥 Predicted image response: {pred_image.status_code}")
 
-                        if pred_image.status_code == 200:
-                            pred_path = f"/tmp/predicted_{timestamp}.jpg"
-                            with open(pred_path, 'wb') as f:
-                                f.write(pred_image.content)
+                if pred_image.status_code == 200:
+                    pred_path = f"/tmp/predicted_{timestamp}.jpg"
+                    with open(pred_path, 'wb') as f:
+                        f.write(pred_image.content)
+                    logger.info(f"💾 Saved predicted image to: {pred_path}")
 
-                            pred_s3_key = f"predicted/{chat_id}/{timestamp}_predicted.jpg"
-                            logger.info(f"📤 Uploading predicted photo to: {pred_s3_key}")
-                            self.upload_to_s3(pred_path, pred_s3_key)
+                    pred_s3_key = f"predicted/{chat_id}/{timestamp}_predicted.jpg"
+                    logger.info(f"📤 Uploading predicted photo to: {pred_s3_key}")
+                    self.upload_to_s3(pred_path, pred_s3_key)
 
-                            self.send_photo(chat_id, pred_path)
-                            os.remove(pred_path)
+                    logger.info(f"📤 Sending predicted image to chat {chat_id}")
+                    self.send_photo(chat_id, pred_path)
+                    os.remove(pred_path)
                 else:
-                    logger.error(f"❌ YOLO service returned error status: {response.status_code}")
-                    self.send_text(chat_id, "❌ Failed to process image with YOLO.")
+                    logger.error(f"❌ Failed to get predicted image: {pred_image.status_code} {pred_image.text}")
+            else:
+                logger.warning("⚠️ No prediction_uid in response")
 
             os.remove(photo_path)
 
         except Exception as e:
             logger.exception(f"❌ YOLO processing failed: {e}")
             self.send_text(chat_id, "❌ Failed to process image with YOLO.")
-            # Clean up the photo file in case of error
-            if os.path.exists(photo_path):
-                os.remove(photo_path)
 
     def test_s3_connection(self, chat_id):
         try:
