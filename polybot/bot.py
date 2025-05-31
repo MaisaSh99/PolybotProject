@@ -9,9 +9,7 @@ from polybot.img_proc import Img
 import boto3
 from datetime import datetime
 
-
 class Bot:
-
     def __init__(self, token, telegram_chat_url):
         self.telegram_bot_client = telebot.TeleBot(token)
         self.telegram_bot_client.remove_webhook()
@@ -19,10 +17,20 @@ class Bot:
         self.telegram_bot_client.set_webhook(url=f'{telegram_chat_url}/{token}/', timeout=60)
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
+        # Configure S3
         self.bucket_name = os.getenv('S3_BUCKET_NAME') or 'maisa-polybot-images'
         logger.info(f"🪣 Using S3 bucket: {self.bucket_name}")
+        
+        # Initialize S3 client using default credential provider chain
         self.s3 = boto3.client('s3', region_name='us-east-2')
-        self.s3.upload_file('/tmp/test.jpg', 'maisa-dev-bucket', 'beatles.jpeg')
+        
+        # Verify S3 bucket exists and is accessible
+        try:
+            self.s3.head_bucket(Bucket=self.bucket_name)
+            logger.info(f"✅ Successfully connected to S3 bucket: {self.bucket_name}")
+        except Exception as e:
+            logger.error(f"❌ Failed to access S3 bucket {self.bucket_name}: {e}")
+            raise
 
     def send_text(self, chat_id, text):
         self.telegram_bot_client.send_message(chat_id, text)
@@ -98,9 +106,14 @@ class ImageProcessingBot(Bot):
         chat_id = msg['chat']['id']
         logger.info(f'Incoming message: {msg}')
 
-        if 'text' in msg and msg['text'].strip().lower() == 'hi':
-            self.send_text(chat_id, "Hi, how can I help you?")
-            return
+        if 'text' in msg:
+            text = msg['text'].strip().lower()
+            if text == 'hi':
+                self.send_text(chat_id, "Hi, how can I help you?")
+                return
+            elif text == 'test s3':
+                self.test_s3_connection(chat_id)
+                return
 
         if self.is_current_msg_photo(msg):
             try:
@@ -213,23 +226,47 @@ class ImageProcessingBot(Bot):
             telegram_user_id = str(from_id if from_id is not None else chat_id)
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
 
-            logger.info(f"🖼️ Using downloaded photo at: {photo_path}")
+            logger.info(f"🖼️ Starting YOLO processing for photo at: {photo_path}")
+            logger.info(f"👤 Telegram user ID: {telegram_user_id}")
+            logger.info(f"⏰ Timestamp: {timestamp}")
+
+            # Check if file exists and is readable
+            if not os.path.exists(photo_path):
+                logger.error(f"❌ Original photo file not found at: {photo_path}")
+                self.send_text(chat_id, "Error: Could not find the uploaded photo.")
+                return
+
+            file_size = os.path.getsize(photo_path)
+            logger.info(f"📏 Original photo size: {file_size} bytes")
 
             # Upload original image to S3
             original_s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
-            logger.info(f"📂 Uploading original image to s3://{self.bucket_name}/{original_s3_key}")
-            self.upload_to_s3(photo_path, original_s3_key)
+            logger.info(f"📂 Attempting to upload original image to s3://{self.bucket_name}/{original_s3_key}")
+            try:
+                self.upload_to_s3(photo_path, original_s3_key)
+                logger.info("✅ Original image uploaded to S3 successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to upload original image to S3: {e}")
+                self.send_text(chat_id, "Error: Failed to save original image.")
+                return
 
             logger.info(f"[Polybot] Original image uploaded. Proceeding to YOLO prediction.")
             logger.info(f"📡 Sending prediction request to {self.yolo_service_url}/predict")
 
             # Open the file and send it as a multipart form
-            with open(photo_path, 'rb') as f:
-                files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
-                response = requests.post(
-                    f"{self.yolo_service_url}/predict",
-                    files=files
-                )
+            try:
+                with open(photo_path, 'rb') as f:
+                    files = {'file': (os.path.basename(photo_path), f, 'image/jpeg')}
+                    logger.info(f"📤 Sending file to YOLO service: {os.path.basename(photo_path)}")
+                    response = requests.post(
+                        f"{self.yolo_service_url}/predict",
+                        files=files
+                    )
+                    logger.info(f"📥 YOLO service response status: {response.status_code}")
+            except Exception as e:
+                logger.error(f"❌ Failed to send file to YOLO service: {e}")
+                self.send_text(chat_id, "Error: Failed to process image with YOLO service.")
+                return
 
             response.raise_for_status()
             result = response.json()
@@ -247,26 +284,69 @@ class ImageProcessingBot(Bot):
             prediction_uid = result.get("prediction_uid")
             if prediction_uid:
                 predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
-                predicted_response = requests.get(predicted_image_url)
-                if predicted_response.status_code == 200:
-                    # Save the predicted image temporarily
-                    predicted_path = f"/tmp/predicted_{timestamp}.jpg"
-                    with open(predicted_path, 'wb') as f:
-                        f.write(predicted_response.content)
-                    
-                    # Upload predicted image to S3
-                    predicted_s3_key = f"predicted/{telegram_user_id}/{timestamp}_predicted.jpg"
-                    logger.info(f"📂 Uploading predicted image to s3://{self.bucket_name}/{predicted_s3_key}")
-                    self.upload_to_s3(predicted_path, predicted_s3_key)
-                    
-                    # Send the predicted image back to the user
-                    self.send_photo(chat_id, predicted_path)
-                    
-                    # Clean up temporary files
-                    os.remove(predicted_path)
-                    os.remove(photo_path)  # Also clean up the original downloaded photo
+                logger.info(f"📥 Fetching predicted image from: {predicted_image_url}")
+                try:
+                    predicted_response = requests.get(predicted_image_url)
+                    logger.info(f"📥 Predicted image response status: {predicted_response.status_code}")
+                    if predicted_response.status_code == 200:
+                        # Save the predicted image temporarily
+                        predicted_path = f"/tmp/predicted_{timestamp}.jpg"
+                        with open(predicted_path, 'wb') as f:
+                            f.write(predicted_response.content)
+                        logger.info(f"✅ Predicted image saved temporarily at: {predicted_path}")
+                        
+                        # Upload predicted image to S3
+                        predicted_s3_key = f"predicted/{telegram_user_id}/{timestamp}_predicted.jpg"
+                        logger.info(f"📂 Uploading predicted image to s3://{self.bucket_name}/{predicted_s3_key}")
+                        try:
+                            self.upload_to_s3(predicted_path, predicted_s3_key)
+                            logger.info("✅ Predicted image uploaded to S3 successfully")
+                        except Exception as e:
+                            logger.error(f"❌ Failed to upload predicted image to S3: {e}")
+                        
+                        # Send the predicted image back to the user
+                        self.send_photo(chat_id, predicted_path)
+                        
+                        # Clean up temporary files
+                        os.remove(predicted_path)
+                        os.remove(photo_path)
+                        logger.info("🧹 Temporary files cleaned up")
+                    else:
+                        logger.error(f"❌ Failed to get predicted image: {predicted_response.status_code}")
+                except Exception as e:
+                    logger.error(f"❌ Error processing predicted image: {e}")
+            else:
+                logger.error("❌ No prediction_uid in YOLO response")
 
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
             self.send_text(chat_id, "Failed to process image with YOLO.")
+
+    def test_s3_connection(self, chat_id):
+        try:
+            # Create a test file
+            test_path = "/tmp/test_s3.txt"
+            with open(test_path, "w") as f:
+                f.write("Testing S3 connection")
+            
+            # Try to upload it
+            test_key = f"test/connection_test_{datetime.now().strftime('%Y%m%d%H%M%S')}.txt"
+            logger.info(f"Testing S3 connection by uploading to s3://{self.bucket_name}/{test_key}")
+            
+            self.upload_to_s3(test_path, test_key)
+            
+            # Try to list objects in the bucket
+            response = self.s3.list_objects_v2(Bucket=self.bucket_name, MaxKeys=5)
+            objects = response.get('Contents', [])
+            
+            # Clean up test file
+            os.remove(test_path)
+            
+            # Send success message
+            self.send_text(chat_id, f"✅ S3 connection test successful!\n\nBucket: {self.bucket_name}\nRecent objects:\n" + 
+                         "\n".join([f"- {obj['Key']}" for obj in objects]))
+            
+        except Exception as e:
+            logger.error(f"S3 connection test failed: {e}")
+            self.send_text(chat_id, f"❌ S3 connection test failed: {str(e)}")
 
