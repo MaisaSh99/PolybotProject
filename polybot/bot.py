@@ -215,12 +215,12 @@ class ImageProcessingBot(Bot):
 
             logger.info(f"🖼️ Using downloaded photo at: {photo_path}")
 
-            s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
-            logger.info(f"📂 About to upload to S3: local_path={photo_path}, s3_key={s3_key}")
+            # Upload original image to S3
+            original_s3_key = f"original/{telegram_user_id}/{timestamp}.jpg"
+            logger.info(f"📂 Uploading original image to s3://{self.bucket_name}/{original_s3_key}")
+            self.upload_to_s3(photo_path, original_s3_key)
 
-            self.upload_to_s3(photo_path, s3_key)
-
-            logger.info(f"[Polybot] Upload finished or skipped. Proceeding to YOLO prediction.")
+            logger.info(f"[Polybot] Original image uploaded. Proceeding to YOLO prediction.")
             logger.info(f"📡 Sending prediction request to {self.yolo_service_url}/predict")
 
             # Open the file and send it as a multipart form
@@ -253,10 +253,18 @@ class ImageProcessingBot(Bot):
                     predicted_path = f"/tmp/predicted_{timestamp}.jpg"
                     with open(predicted_path, 'wb') as f:
                         f.write(predicted_response.content)
+                    
+                    # Upload predicted image to S3
+                    predicted_s3_key = f"predicted/{telegram_user_id}/{timestamp}_predicted.jpg"
+                    logger.info(f"📂 Uploading predicted image to s3://{self.bucket_name}/{predicted_s3_key}")
+                    self.upload_to_s3(predicted_path, predicted_s3_key)
+                    
                     # Send the predicted image back to the user
                     self.send_photo(chat_id, predicted_path)
-                    # Clean up
+                    
+                    # Clean up temporary files
                     os.remove(predicted_path)
+                    os.remove(photo_path)  # Also clean up the original downloaded photo
 
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
