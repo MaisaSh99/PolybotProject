@@ -32,7 +32,6 @@ jobs:
       - name: Upload service files
         run: |
           scp -i key.pem -o StrictHostKeyChecking=no polybot-dev.service $EC2_USER@$EC2_IP:~/polybot-dev.service
-          scp -i key.pem -o StrictHostKeyChecking=no ngrok-dev.service $EC2_USER@$EC2_IP:~/ngrok-dev.service
 
       - name: SSH and deploy
         run: |
@@ -66,12 +65,9 @@ jobs:
             pip install -r polybot/requirements.txt
 
             sudo mv ~/polybot-dev.service /etc/systemd/system/polybot-dev.service
-            sudo mv ~/ngrok-dev.service /etc/systemd/system/ngrok-dev.service
             sudo systemctl daemon-reload
             sudo systemctl restart polybot-dev.service
-            sudo systemctl restart ngrok-dev.service
             sudo systemctl enable polybot-dev.service
-            sudo systemctl enable ngrok-dev.service
 
             sleep 10
             curl -X POST https://api.telegram.org/bot$BOT_DEV_TOKEN/setWebhook \
