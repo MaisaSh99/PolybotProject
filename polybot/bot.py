@@ -108,21 +108,13 @@ class ImageProcessingBot(Bot):
 
             media_group_id = msg.get('media_group_id')
 
-            # ✅ Normalize and log caption early!
+            # ✅ Normalize and log caption early
             raw_caption = msg.get('caption', '')
             logger.info(f"📌 Raw caption: '{raw_caption}'")
             caption = re.sub(r'[^a-zA-Z0-9 ]', '', raw_caption).strip().lower()
             logger.info(f"📌 Normalized caption: '{caption}'")
 
-            if media_group_id:
-                ...
-                # (leave this unchanged)
-
-            if not caption:
-                self.send_text(chat_id, "📌 Please add a filter name like 'blur', 'rotate', 'yolo', etc.")
-                return
-
-            # ✅ Now this check will work correctly
+            # ✅ Handle YOLO before media group or other filters
             if caption == 'yolo':
                 if self.processing_lock.acquire(blocking=False):
                     try:
@@ -133,6 +125,28 @@ class ImageProcessingBot(Bot):
                     self.send_text(chat_id, "⏳ Already processing an image. Please wait.")
                 return
 
+            if media_group_id:
+                group = self.media_groups.setdefault(media_group_id, {
+                    'chat_id': chat_id,
+                    'photos': [],
+                    'filter': caption if caption else None,
+                    'timer': None
+                })
+                group['photos'].append(photo_path)
+                if caption:
+                    group['filter'] = caption
+                if group['timer']:
+                    group['timer'].cancel()
+                timer = threading.Timer(2.0, self._process_media_group, args=(media_group_id,))
+                group['timer'] = timer
+                timer.start()
+                return
+
+            if not caption:
+                self.send_text(chat_id, "📌 Please add a filter name like 'blur', 'rotate', 'yolo', etc.")
+                return
+
+            # ✅ If not YOLO, apply standard filters
             self.apply_filter_from_caption(chat_id, photo_path, caption)
             return
 
