@@ -75,9 +75,31 @@ class ImageProcessingBot(Bot):
         self.yolo_service_url = yolo_service_url
 
     def upload_file_to_s3(self, local_path, bucket_name, s3_key):
+        logger.info(f"📦 Preparing upload to S3")
         s3 = boto3.client('s3')
-        s3.upload_file(local_path, bucket_name, s3_key)
-        return f"s3://{bucket_name}/{s3_key}"
+
+        if not os.path.exists(local_path):
+            logger.error(f"❌ File not found: {local_path}")
+            return
+
+        try:
+            logger.info(f"⬆️ Uploading {local_path} to s3://{bucket_name}/{s3_key}")
+            logger.info(f"⚙️ Runtime bucket_name={bucket_name}, s3_key={s3_key}, local_path={local_path}")
+
+            s3.upload_file(local_path, bucket_name, s3_key)
+            logger.info(f"✅ Upload successful!")
+
+            # List objects in the bucket to confirm
+            response = s3.list_objects_v2(Bucket=bucket_name)
+            if "Contents" in response:
+                logger.info("🔍 Current S3 bucket contents:")
+                for obj in response["Contents"]:
+                    logger.info(f" - {obj['Key']}")
+            else:
+                logger.warning("⚠️ S3 bucket is still empty after upload.")
+
+        except Exception as e:
+            logger.error(f"❌ Upload failed: {e}")
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
@@ -199,20 +221,30 @@ class ImageProcessingBot(Bot):
 
             filtered_path = img.save_img()
             self.send_photo(chat_id, str(filtered_path))
-        except Exception as e:
-            logger.error(f"Error applying filter: {e}")
-            self.send_text(chat_id, "An error occurred while applying the filter.")
+        except Exception:
+            logger.exception("YOLO prediction failed:")
 
     def apply_yolo(self, chat_id, photo_path):
         try:
-            with open(photo_path, 'rb') as image_file:
-                response = requests.post(
-                    f"{self.yolo_service_url}/predict",
-                    files={'file': image_file}
-                )
-                response.raise_for_status()
-                result = response.json()
-                logger.info(f"YOLO raw response: {result}")
+            bucket_name = os.getenv("S3_BUCKET_NAME")
+            if not bucket_name:
+                self.send_text(chat_id, "S3 bucket not configured. Contact admin.")
+                return
+
+            # Step 1: Upload original image to S3
+            user_id = chat_id
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            s3_key = f"original/{user_id}/{timestamp}-{os.path.basename(photo_path)}"
+            self.upload_file_to_s3(photo_path, bucket_name, s3_key)
+
+            # Step 2: Call YOLO service with image name
+            response = requests.post(
+                f"{self.yolo_service_url}/predict",
+                json={"image_name": s3_key}
+            )
+            response.raise_for_status()
+            result = response.json()
+            logger.info(f"YOLO raw response: {result}")
 
             labels = result.get("labels", [])
             prediction_uid = result.get("prediction_uid")
@@ -221,8 +253,8 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "No objects detected.")
                 return
 
-            # Download predicted image from YOLO service
-            predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}"
+            # Step 3: Download predicted image from YOLO service
+            predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
             predicted_response = requests.get(predicted_image_url)
             predicted_response.raise_for_status()
 
@@ -230,18 +262,11 @@ class ImageProcessingBot(Bot):
             with open(predicted_img_path, 'wb') as f:
                 f.write(predicted_response.content)
 
-            # Upload predicted image to S3
-            bucket_name = os.getenv("S3_BUCKET_NAME")
-            if bucket_name:
-                user_id = chat_id
-                timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-                s3_key = f"predicted/{user_id}/{timestamp}-{os.path.basename(predicted_img_path)}"
-                self.upload_file_to_s3(predicted_img_path, bucket_name, s3_key)
-                logger.info(f"Uploaded predicted image to S3 bucket {bucket_name} at {s3_key}")
-            else:
-                logger.warning("S3_BUCKET_NAME not set. Skipping predicted image upload.")
+            # Step 4: Upload predicted image to S3
+            pred_s3_key = f"predicted/{user_id}/{timestamp}-{os.path.basename(predicted_img_path)}"
+            self.upload_file_to_s3(predicted_img_path, bucket_name, pred_s3_key)
 
-            # Send result back to user
+            # Step 5: Send results to user
             result_text = "Detected objects:\n" + "\n".join(labels)
             self.send_text(chat_id, result_text)
             self.send_photo(chat_id, predicted_img_path)
@@ -249,4 +274,6 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
             self.send_text(chat_id, "Failed to process image with YOLO.")
+
+
 
