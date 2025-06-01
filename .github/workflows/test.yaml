@@ -8,32 +8,43 @@ on:
 jobs:
   run-tests:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
 
-      - name: Set up Python
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('polybot/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies from requirements.txt
         run: |
+          pip install --upgrade pip
           pip install -r polybot/requirements.txt
 
-      - name: Run concat(), rotate(), salt_n_pepper(), segment() tests
+      - name: 🔧 Run concat(), rotate(), salt_n_pepper(), segment() tests
         run: |
-          echo -e "\n\nTesting concat()\n"
+          echo -e "\n\n🔍 Testing concat()\n"
           python -m polybot.test.test_concat
           
-          echo -e "\n\nTesting rotate()\n"
+          echo -e "\n\n🔍 Testing rotate()\n"
           python -m polybot.test.test_rotate
           
-          echo -e "\n\nTesting salt_n_pepper()\n"
+          echo -e "\n\n🔍 Testing salt_n_pepper()\n"
           python -m polybot.test.test_salt_n_pepper
           
-          echo -e "\n\nTesting segment()\n"
+          echo -e "\n\n🔍 Testing segment()\n"
           python -m polybot.test.test_segment
 
-      - name: Test Telegram bot logic
+      - name: 🤖 Test Telegram bot logic
         run: |
           python -m polybot.test.test_telegram_bot

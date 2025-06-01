@@ -42,10 +42,6 @@ jobs:
             sudo apt update
             sudo apt install -y git python3 python3-pip python3-venv curl unzip
 
-            echo "📦 Installing Python dependencies globally..."
-            pip3 install --upgrade pip
-            pip3 install boto3
-
             echo "📥 Installing ngrok if not present..."
             if ! command -v ngrok &> /dev/null; then
               curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
