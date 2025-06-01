@@ -2,12 +2,12 @@ import os
 import time
 import threading
 import requests
+import re
 from datetime import datetime
 from loguru import logger
 from telebot import TeleBot
 from telebot.types import InputFile
 import boto3
-import re  # ✅ Added for caption normalization
 
 from polybot.img_proc import Img
 
@@ -114,7 +114,7 @@ class ImageProcessingBot(Bot):
             caption = re.sub(r'[^a-zA-Z0-9 ]', '', raw_caption).strip().lower()
             logger.info(f"📌 Normalized caption: '{caption}'")
 
-            # ✅ Handle YOLO before media group or other filters
+            # ✅ Always check YOLO first (even if media group exists)
             if caption == 'yolo':
                 if self.processing_lock.acquire(blocking=False):
                     try:
@@ -125,6 +125,7 @@ class ImageProcessingBot(Bot):
                     self.send_text(chat_id, "⏳ Already processing an image. Please wait.")
                 return
 
+            # ✅ Now media group logic (after YOLO check)
             if media_group_id:
                 group = self.media_groups.setdefault(media_group_id, {
                     'chat_id': chat_id,
@@ -146,7 +147,6 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "📌 Please add a filter name like 'blur', 'rotate', 'yolo', etc.")
                 return
 
-            # ✅ If not YOLO, apply standard filters
             self.apply_filter_from_caption(chat_id, photo_path, caption)
             return
 
