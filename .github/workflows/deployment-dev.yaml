@@ -21,8 +21,10 @@ jobs:
       NGROK_DOMAIN: "https://loosely-coherent-lacewing.ngrok-free.app"
 
     steps:
-      - name: Checkout repo
+      - name: Checkout dev branch
         uses: actions/checkout@v4
+        with:
+          ref: dev
 
       - name: Set up SSH key
         run: |
