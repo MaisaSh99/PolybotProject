@@ -37,4 +37,4 @@
 
         - name: Test Telegram bot logic
           run: |
-            python -m polybot.test.test_telegram_bot
+            SKIP_S3=1 python -m polybot.test.test_telegram_bot
