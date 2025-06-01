@@ -17,10 +17,15 @@ class Bot:
         self.telegram_bot_client.set_webhook(url=f'{telegram_chat_url}/{token}/', timeout=60)
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
-        # ✅ S3 Initialization
+        # ✅ S3 Initialization (with optional test skip)
         self.bucket_name = os.getenv('S3_BUCKET_NAME') or 'maisa-polybot-images'
-        self.s3 = boto3.client('s3', region_name='us-east-2')
 
+        if os.getenv("SKIP_S3") == "1":
+            self.s3 = None
+            logger.warning("🧪 SKIP_S3 is set — skipping S3 setup.")
+            return
+
+        self.s3 = boto3.client('s3', region_name='us-east-2')
         try:
             self.s3.head_bucket(Bucket=self.bucket_name)
             logger.info(f"✅ Connected to S3 bucket: {self.bucket_name}")
@@ -72,6 +77,10 @@ class Bot:
 
     # ✅ Upload to S3
     def upload_to_s3(self, local_path, s3_key):
+        if self.s3 is None:
+            logger.warning("🧪 Skipping S3 upload due to SKIP_S3 mode.")
+            return
+
         if not os.path.exists(local_path):
             logger.error(f"❌ Local file not found: {local_path}")
             return
