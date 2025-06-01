@@ -108,33 +108,21 @@ class ImageProcessingBot(Bot):
 
             media_group_id = msg.get('media_group_id')
 
-            # ✅ Normalize and log caption
+            # ✅ Normalize and log caption early!
             raw_caption = msg.get('caption', '')
             logger.info(f"📌 Raw caption: '{raw_caption}'")
             caption = re.sub(r'[^a-zA-Z0-9 ]', '', raw_caption).strip().lower()
             logger.info(f"📌 Normalized caption: '{caption}'")
 
             if media_group_id:
-                group = self.media_groups.setdefault(media_group_id, {
-                    'chat_id': chat_id,
-                    'photos': [],
-                    'filter': caption if caption else None,
-                    'timer': None
-                })
-                group['photos'].append(photo_path)
-                if caption:
-                    group['filter'] = caption
-                if group['timer']:
-                    group['timer'].cancel()
-                timer = threading.Timer(2.0, self._process_media_group, args=(media_group_id,))
-                group['timer'] = timer
-                timer.start()
-                return
+                ...
+                # (leave this unchanged)
 
             if not caption:
                 self.send_text(chat_id, "📌 Please add a filter name like 'blur', 'rotate', 'yolo', etc.")
                 return
 
+            # ✅ Now this check will work correctly
             if caption == 'yolo':
                 if self.processing_lock.acquire(blocking=False):
                     try:
