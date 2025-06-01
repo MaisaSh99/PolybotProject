@@ -1,13 +1,14 @@
-name: Deploy Polybot
+name: Deploy Polybot (Prod)
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
-  deploy-polybot:
-    name: Deploy to EC2
+  deploy-polybot-prod:
+    name: Deploy to EC2 (Prod)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
@@ -68,6 +69,7 @@ jobs:
             source venv/bin/activate
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
+            pip install boto3
 
             echo "⚙️ Installing and starting services..."
             sudo mv ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
