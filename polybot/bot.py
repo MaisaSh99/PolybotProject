@@ -4,6 +4,7 @@ from loguru import logger
 import os
 import time
 import boto3
+import requests
 from telebot.types import InputFile
 from polybot.img_proc import Img
 
@@ -100,6 +101,7 @@ class ImageProcessingBot(Bot):
     def __init__(self, token, telegram_chat_url, yolo_service_url=None):
         super().__init__(token, telegram_chat_url)
         self.media_groups = {}
+        self.yolo_service_url = yolo_service_url
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
@@ -189,25 +191,63 @@ class ImageProcessingBot(Bot):
             self.send_text(chat_id, "Concat failed. Make sure both images are compatible.")
 
     def apply_filter_from_caption(self, chat_id, photo_path, caption):
-        img = Img(photo_path)
         try:
             if caption == 'blur':
+                img = Img(photo_path)
                 img.blur()
+                filtered_path = img.save_img()
             elif caption == 'rotate':
+                img = Img(photo_path)
                 img.rotate()
+                filtered_path = img.save_img()
             elif caption in ('salt and pepper', 'salt_n_pepper'):
+                img = Img(photo_path)
                 img.salt_n_pepper()
+                filtered_path = img.save_img()
             elif caption == 'contour':
+                img = Img(photo_path)
                 img.contour()
+                filtered_path = img.save_img()
             elif caption == 'segment':
+                img = Img(photo_path)
                 img.segment()
+                filtered_path = img.save_img()
+            elif caption == 'yolo':
+                self.apply_yolo_filter(chat_id, photo_path)
+                return
             else:
-                self.send_text(chat_id, f"Unknown filter '{caption}'.")
+                self.send_text(chat_id, f"Unknown filter '{caption}'. Available filters: blur, rotate, salt and pepper, contour, segment, yolo.")
                 return
 
-            filtered_path = img.save_img()
             self.upload_to_s3(filtered_path, f"filtered/{chat_id}/{os.path.basename(filtered_path)}")
             self.send_photo(chat_id, str(filtered_path))
         except Exception as e:
             logger.error(f"Error applying filter: {e}")
             self.send_text(chat_id, "An error occurred while applying the filter.")
+
+    def apply_yolo_filter(self, chat_id, photo_path):
+        if not self.yolo_service_url:
+            self.send_text(chat_id, "YOLO service is not configured.")
+            return
+
+        try:
+            with open(photo_path, 'rb') as f:
+                files = {'file': f}
+                response = requests.post(f"{self.yolo_service_url}/predict", files=files, timeout=30)
+
+            if response.status_code != 200:
+                self.send_text(chat_id, f"YOLO service error: {response.status_code}")
+                return
+
+            result = response.json()
+            prediction_path = result.get('prediction_path')
+            labels = result.get('labels', [])
+
+            if prediction_path:
+                self.send_text(chat_id, f"Detected: {', '.join(labels) if labels else 'No objects'}")
+                self.send_photo(chat_id, prediction_path)
+            else:
+                self.send_text(chat_id, "YOLO prediction succeeded, but no result image returned.")
+        except Exception as e:
+            logger.error(f"YOLO error: {e}")
+            self.send_text(chat_id, "YOLO filter failed. Please try again.")
