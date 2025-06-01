@@ -1,11 +1,14 @@
+import string
 import threading
 import telebot
 from loguru import logger
 import os
 import time
 import requests
+import boto3
 from telebot.types import InputFile
 from polybot.img_proc import Img
+from datetime import datetime, timezone
 
 
 class Bot:
@@ -71,6 +74,11 @@ class ImageProcessingBot(Bot):
         self.media_groups = {}
         self.yolo_service_url = yolo_service_url
 
+    def upload_file_to_s3(self, local_path, bucket_name, s3_key):
+        s3 = boto3.client('s3')
+        s3.upload_file(local_path, bucket_name, s3_key)
+        return f"s3://{bucket_name}/{s3_key}"
+
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
         logger.info(f'Incoming message: {msg}')
@@ -82,10 +90,22 @@ class ImageProcessingBot(Bot):
         if self.is_current_msg_photo(msg):
             try:
                 photo_path = self.download_user_photo(msg)
+
+                # Upload to S3 after saving
+                bucket_name = os.getenv("S3_BUCKET_NAME")
+                if bucket_name:
+                    user_id = msg['from']['id']
+                    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+                    s3_key = f"original/{user_id}/{timestamp}-{os.path.basename(photo_path)}"
+                    self.upload_file_to_s3(photo_path, bucket_name, s3_key)
+                    logger.info(f"Uploaded original image to S3 bucket {bucket_name} at {s3_key}")
+                else:
+                    logger.warning("S3_BUCKET_NAME not set. Skipping S3 upload.")
+
             except Exception:
                 return
 
-            caption = msg.get('caption', '').strip().lower()
+            caption = msg.get('caption', '').strip().lower().strip(string.punctuation)
             media_group_id = msg.get('media_group_id')
 
             if media_group_id:
@@ -112,7 +132,7 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "You need to choose a filter.")
                 return
 
-            if caption == 'yolo':
+            if caption.startswith('yolo'):
                 self.apply_yolo(chat_id, photo_path)
             else:
                 self.apply_filter_from_caption(chat_id, photo_path, caption)
@@ -195,12 +215,36 @@ class ImageProcessingBot(Bot):
                 logger.info(f"YOLO raw response: {result}")
 
             labels = result.get("labels", [])
+            prediction_uid = result.get("prediction_uid")
+
             if not labels:
                 self.send_text(chat_id, "No objects detected.")
                 return
 
+            # Download predicted image from YOLO service
+            predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}"
+            predicted_response = requests.get(predicted_image_url)
+            predicted_response.raise_for_status()
+
+            predicted_img_path = f"predicted_{os.path.basename(photo_path)}"
+            with open(predicted_img_path, 'wb') as f:
+                f.write(predicted_response.content)
+
+            # Upload predicted image to S3
+            bucket_name = os.getenv("S3_BUCKET_NAME")
+            if bucket_name:
+                user_id = chat_id
+                timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+                s3_key = f"predicted/{user_id}/{timestamp}-{os.path.basename(predicted_img_path)}"
+                self.upload_file_to_s3(predicted_img_path, bucket_name, s3_key)
+                logger.info(f"Uploaded predicted image to S3 bucket {bucket_name} at {s3_key}")
+            else:
+                logger.warning("S3_BUCKET_NAME not set. Skipping predicted image upload.")
+
+            # Send result back to user
             result_text = "Detected objects:\n" + "\n".join(labels)
             self.send_text(chat_id, result_text)
+            self.send_photo(chat_id, predicted_img_path)
 
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
