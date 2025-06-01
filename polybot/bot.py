@@ -7,6 +7,7 @@ from loguru import logger
 from telebot import TeleBot
 from telebot.types import InputFile
 import boto3
+import re  # ✅ Added for caption normalization
 
 from polybot.img_proc import Img
 
@@ -106,7 +107,12 @@ class ImageProcessingBot(Bot):
                 return
 
             media_group_id = msg.get('media_group_id')
-            caption = msg.get('caption', '').strip().lower()
+
+            # ✅ Normalize and log caption
+            raw_caption = msg.get('caption', '')
+            logger.info(f"📌 Raw caption: '{raw_caption}'")
+            caption = re.sub(r'[^a-zA-Z0-9 ]', '', raw_caption).strip().lower()
+            logger.info(f"📌 Normalized caption: '{caption}'")
 
             if media_group_id:
                 group = self.media_groups.setdefault(media_group_id, {
@@ -187,21 +193,21 @@ class ImageProcessingBot(Bot):
                 img.blur()
             elif caption == 'rotate':
                 img.rotate()
-            elif caption in ('salt and pepper', 'salt_n_pepper'):
+            elif caption in ('salt and pepper', 'saltnpepper', 'salt_n_pepper'):
                 img.salt_n_pepper()
             elif caption == 'contour':
                 img.contour()
             elif caption == 'segment':
                 img.segment()
             else:
-                self.send_text(chat_id, f"Unknown filter '{caption}'.")
+                self.send_text(chat_id, f"❌ Unknown filter '{caption}'.")
                 return
             filtered_path = img.save_img()
             self.upload_to_s3(filtered_path, f"filtered/{chat_id}/{os.path.basename(filtered_path)}")
             self.send_photo(chat_id, str(filtered_path))
         except Exception as e:
             logger.error(f"Error applying filter '{caption}': {e}")
-            self.send_text(chat_id, "An error occurred while applying the filter.")
+            self.send_text(chat_id, "❌ An error occurred while applying the filter.")
 
     def apply_yolo(self, chat_id, photo_path):
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
