@@ -1,52 +1,40 @@
-name: Polybot Unit Tests
+ name: Test
 
-on:
-  pull_request:
-    branches:
-      - main
+ on:
+    pull_request:
+      branches:
+        - main
 
-jobs:
-  run-tests:
-    runs-on: ubuntu-latest
+ jobs:
+    TestImgProcessingChatbotApp:
+      runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      steps:
+        - uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: "3.10"
 
-      - name: Cache pip packages
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('polybot/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+        - name: Install dependencies
+          run: |
+            pip install -r polybot/requirements.txt
 
-      - name: Install dependencies from requirements.txt
-        run: |
-          pip install --upgrade pip
-          pip install -r polybot/requirements.txt
+        - name: Test filters
+          run: |
+            echo -e "\n\nTesting concat()\n"
+            python -m polybot.test.test_concat
+  
+            echo -e "\n\nTesting rotate()\n"
+            python -m polybot.test.test_rotate
+  
+            echo -e "\n\nTesting salt_n_pepper()\n"
+            python -m polybot.test.test_salt_n_pepper
+  
+            echo -e "\n\nTesting segment()\n"
+            python -m polybot.test.test_segment
 
-      - name: 🔧 Run concat(), rotate(), salt_n_pepper(), segment() tests
-        run: |
-          echo -e "\n\n🔍 Testing concat()\n"
-          python -m polybot.test.test_concat
-          
-          echo -e "\n\n🔍 Testing rotate()\n"
-          python -m polybot.test.test_rotate
-          
-          echo -e "\n\n🔍 Testing salt_n_pepper()\n"
-          python -m polybot.test.test_salt_n_pepper
-          
-          echo -e "\n\n🔍 Testing segment()\n"
-          python -m polybot.test.test_segment
-
-      - name: 🤖 Test Telegram bot logic
-        env:
-          SKIP_TELEGRAM_TOKEN_VALIDATION: 1
-        run: |
-          python -m polybot.test.test_telegram_bot
+        - name: Test Telegram bot logic
+          run: |
+            python -m polybot.test.test_telegram_bot
