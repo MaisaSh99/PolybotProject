@@ -75,31 +75,30 @@ class ImageProcessingBot(Bot):
         self.yolo_service_url = yolo_service_url
 
     def upload_file_to_s3(self, local_path, bucket_name, s3_key):
-        logger.info(f"📦 Preparing upload to S3")
-        s3 = boto3.client('s3')
+        """
+        Uploads a local file to the specified S3 bucket with the given key.
+
+        Args:
+            local_path (str): Path to the local file to upload.
+            bucket_name (str): Name of the target S3 bucket.
+            s3_key (str): S3 object key (i.e., the file path in the bucket).
+        """
+        logger.info("📦 Preparing upload to S3")
 
         if not os.path.exists(local_path):
             logger.error(f"❌ File not found: {local_path}")
             return
 
+        s3 = boto3.client('s3')
+
         try:
             logger.info(f"⬆️ Uploading {local_path} to s3://{bucket_name}/{s3_key}")
-            logger.info(f"⚙️ Runtime bucket_name={bucket_name}, s3_key={s3_key}, local_path={local_path}")
-
             s3.upload_file(local_path, bucket_name, s3_key)
-            logger.info(f"✅ Upload successful!")
+            logger.info("✅ Upload successful!")
 
-            # List objects in the bucket to confirm
-            response = s3.list_objects_v2(Bucket=bucket_name)
-            if "Contents" in response:
-                logger.info("🔍 Current S3 bucket contents:")
-                for obj in response["Contents"]:
-                    logger.info(f" - {obj['Key']}")
-            else:
-                logger.warning("⚠️ S3 bucket is still empty after upload.")
 
         except Exception as e:
-            logger.error(f"❌ Upload failed: {e}")
+            logger.error(f"❌ Upload to S3 failed: {e}")
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
@@ -154,13 +153,17 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "You need to choose a filter.")
                 return
 
-            if caption.startswith('yolo'):
-                self.apply_yolo(chat_id, photo_path)
-            else:
-                self.apply_filter_from_caption(chat_id, photo_path, caption)
-            return
+            raw_caption = msg.get('caption', '')
+            caption = raw_caption.strip().lower().strip(string.punctuation)
+            logger.info(f"📸 Caption received: '{caption}'")
 
-        self.send_text(chat_id, "Please send a photo with a caption indicating the filter to apply.")
+            # Decide whether to run YOLO or apply a regular filter
+            if caption == 'yolo':
+                self.apply_yolo(chat_id, photo_path)
+            elif caption:
+                self.apply_filter_from_caption(chat_id, photo_path, caption)
+            else:
+                self.send_text(chat_id, "You need to choose a filter.")
 
     def _process_media_group(self, group_id):
         group = self.media_groups.pop(group_id, None)
