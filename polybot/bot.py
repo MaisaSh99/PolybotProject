@@ -154,7 +154,7 @@ class ImageProcessingBot(Bot):
                     with open(pred_path, 'wb') as f:
                         f.write(pred_response.content)
                     s3_key = f"predicted/{chat_id}/{timestamp}_predicted.jpg"
-                    self.upload_to_s3(pred_path, s3_key)
+                    # self.upload_to_s3(pred_path, s3_key)
                     self.send_photo(chat_id, pred_path)
                     os.remove(pred_path)
 
