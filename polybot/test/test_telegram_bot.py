@@ -50,8 +50,7 @@ class TestBot(unittest.TestCase):
 
     @patch('telebot.TeleBot')
     def setUp(self, mock_telebot):
-        # ✅ Use a dummy valid-format token
-        bot = ImageProcessingBot(token='123456:FAKE-TOKEN-FORMAT', telegram_chat_url='webhook_url')
+        bot = ImageProcessingBot(token='bot_token', telegram_chat_url='webhook_url')
         bot.telegram_bot_client = mock_telebot.return_value
 
         mock_file = Mock()

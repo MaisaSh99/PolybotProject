@@ -9,6 +9,11 @@ from polybot.img_proc import Img
 from loguru import logger
 import boto3
 
+# ✅ Skip token validation during testing (for unit tests)
+if os.getenv("SKIP_TELEGRAM_TOKEN_VALIDATION") == "1":
+    import telebot.util
+    telebot.util.validate_token = lambda token: True
+
 class Bot:
     def __init__(self, token, telegram_chat_url):
         self.telegram_bot_client = TeleBot(token)
@@ -69,12 +74,10 @@ class ImageProcessingBot(Bot):
 
         self.processed_messages.add(unique_key)
         if len(self.processed_messages) > 1000:
-            # Limit memory use
             self.processed_messages = set(list(self.processed_messages)[-500:])
 
         logger.info(f"📩 Processing new message: {unique_key}")
 
-        # Now proceed with regular logic
         if 'text' in msg:
             text = msg['text'].strip().lower()
             if text == 'hi':
@@ -154,7 +157,7 @@ class ImageProcessingBot(Bot):
                     with open(pred_path, 'wb') as f:
                         f.write(pred_response.content)
                     s3_key = f"predicted/{chat_id}/{timestamp}_predicted.jpg"
-                    # self.upload_to_s3(pred_path, s3_key)
+                    self.upload_to_s3(pred_path, s3_key)
                     self.send_photo(chat_id, pred_path)
                     os.remove(pred_path)
 
