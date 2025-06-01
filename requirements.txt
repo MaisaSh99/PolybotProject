@@ -1,0 +1,6 @@
+pyTelegramBotAPI
+boto3
+requests
+loguru
+pillow
+matplotlib

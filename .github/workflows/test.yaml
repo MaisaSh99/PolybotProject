@@ -1,39 +1,40 @@
-name: Polybot Unit Tests
+ name: Test
 
-on:
-  pull_request:
-    branches:
-      - main
+ on:
+    pull_request:
+      branches:
+        - main
 
-jobs:
-  run-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+ jobs:
+    TestImgProcessingChatbotApp:
+      runs-on: ubuntu-latest
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
+      steps:
+        - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          pip install -r polybot/requirements.txt
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: "3.10"
 
-      - name: Run concat(), rotate(), salt_n_pepper(), segment() tests
-        run: |
-          echo -e "\n\nTesting concat()\n"
-          python -m polybot.test.test_concat
-          
-          echo -e "\n\nTesting rotate()\n"
-          python -m polybot.test.test_rotate
-          
-          echo -e "\n\nTesting salt_n_pepper()\n"
-          python -m polybot.test.test_salt_n_pepper
-          
-          echo -e "\n\nTesting segment()\n"
-          python -m polybot.test.test_segment
+        - name: Install dependencies
+          run: |
+            pip install -r polybot/requirements.txt
 
-      - name: Test Telegram bot logic
-        run: |
-          python -m polybot.test.test_telegram_bot
+        - name: Test filters
+          run: |
+            echo -e "\n\nTesting concat()\n"
+            python -m polybot.test.test_concat
+  
+            echo -e "\n\nTesting rotate()\n"
+            python -m polybot.test.test_rotate
+  
+            echo -e "\n\nTesting salt_n_pepper()\n"
+            python -m polybot.test.test_salt_n_pepper
+  
+            echo -e "\n\nTesting segment()\n"
+            python -m polybot.test.test_segment
+
+        - name: Test Telegram bot logic
+          run: |
+            SKIP_S3=1 python -m polybot.test.test_telegram_bot
