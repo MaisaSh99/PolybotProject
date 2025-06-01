@@ -26,7 +26,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependencies from requirements.txt
+      - name: Install dependencies from polybot/requirements.txt
         run: |
           pip install --upgrade pip
           pip install -r polybot/requirements.txt
@@ -35,13 +35,13 @@ jobs:
         run: |
           echo -e "\n\n🔍 Testing concat()\n"
           python -m polybot.test.test_concat
-          
+
           echo -e "\n\n🔍 Testing rotate()\n"
           python -m polybot.test.test_rotate
-          
+
           echo -e "\n\n🔍 Testing salt_n_pepper()\n"
           python -m polybot.test.test_salt_n_pepper
-          
+
           echo -e "\n\n🔍 Testing segment()\n"
           python -m polybot.test.test_segment
 
