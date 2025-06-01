@@ -17,7 +17,6 @@ class Bot:
         self.telegram_bot_client.set_webhook(url=f'{telegram_chat_url}/{token}/', timeout=60)
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
-        # ✅ S3 Initialization (with optional test skip)
         self.bucket_name = os.getenv('S3_BUCKET_NAME') or 'maisa-polybot-images'
 
         if os.getenv("SKIP_S3") == "1":
@@ -43,11 +42,8 @@ class Bot:
         return 'photo' in msg
 
     def download_user_photo(self, msg):
-        """
-        Downloads the photo sent to the Bot to `photos` directory (must exist)
-        """
         if not self.is_current_msg_photo(msg):
-            raise RuntimeError(f'Message content of type \'photo\' expected')
+            raise RuntimeError("Message content of type 'photo' expected")
 
         try:
             file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
@@ -70,12 +66,8 @@ class Bot:
         if not os.path.exists(img_path):
             raise RuntimeError("Image path doesn't exist")
 
-        self.telegram_bot_client.send_photo(
-            chat_id,
-            InputFile(img_path)
-        )
+        self.telegram_bot_client.send_photo(chat_id, InputFile(img_path))
 
-    # ✅ Upload to S3
     def upload_to_s3(self, local_path, s3_key):
         if self.s3 is None:
             logger.warning("🧪 Skipping S3 upload due to SKIP_S3 mode.")
@@ -92,18 +84,20 @@ class Bot:
 
     def handle_message(self, msg):
         logger.info(f'Incoming message: {msg}')
-        self.send_text(msg['chat']['id'], f'Your original message: {msg["text"]}')
+        text = msg.get("text", "<no text>")
+        self.send_text(msg["chat"]["id"], f"Your original message: {text}")
 
 
 class QuoteBot(Bot):
     def handle_message(self, msg):
         logger.info(f'Incoming message: {msg}')
-        if msg["text"] != 'Please don\'t quote me':
-            self.send_text_with_quote(msg['chat']['id'], msg["text"], quoted_msg_id=msg["message_id"])
+        text = msg.get("text", "")
+        if text != "Please don't quote me":
+            self.send_text_with_quote(msg['chat']['id'], text, quoted_msg_id=msg["message_id"])
 
 
 class ImageProcessingBot(Bot):
-    def __init__(self, token, telegram_chat_url):
+    def __init__(self, token, telegram_chat_url, yolo_service_url=None):
         super().__init__(token, telegram_chat_url)
         self.media_groups = {}
 
@@ -188,7 +182,7 @@ class ImageProcessingBot(Bot):
                 return
 
             result_path = img1.save_img()
-            self.upload_to_s3(result_path, f"filtered/{chat_id}/{os.path.basename(result_path)}")  # ✅ Upload
+            self.upload_to_s3(result_path, f"filtered/{chat_id}/{os.path.basename(result_path)}")
             self.send_photo(chat_id, str(result_path))
         except Exception as e:
             logger.error(f"Concat error: {e}")
@@ -212,7 +206,7 @@ class ImageProcessingBot(Bot):
                 return
 
             filtered_path = img.save_img()
-            self.upload_to_s3(filtered_path, f"filtered/{chat_id}/{os.path.basename(filtered_path)}")  # ✅ Upload
+            self.upload_to_s3(filtered_path, f"filtered/{chat_id}/{os.path.basename(filtered_path)}")
             self.send_photo(chat_id, str(filtered_path))
         except Exception as e:
             logger.error(f"Error applying filter: {e}")
