@@ -104,7 +104,7 @@ class TestBot(unittest.TestCase):
     def test_yolo_filter(self, mock_post):
         mock_msg['caption'] = 'yolo'
 
-        # ✅ Simulate successful YOLO response
+        # Mock YOLO response
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'labels': ['cat', 'dog'],
@@ -112,25 +112,23 @@ class TestBot(unittest.TestCase):
             'uid': 'mock-uid-123'
         }
 
-        # ✅ Let photo download and upload run normally
-        self.bot.upload_file_to_s3 = MagicMock()
-
-        # ✅ Simulate failure when trying to send photo back to user (after YOLO)
-        self.bot.send_photo = MagicMock(side_effect=RuntimeError("Read-only file system"))
-
-        # ✅ Mock send_message to capture output
+        # Mock Telegram interactions
         self.bot.telegram_bot_client.send_message = MagicMock()
+        self.bot.telegram_bot_client.send_photo = MagicMock()
 
-        # Run handler
         self.bot.handle_message(mock_msg)
 
-        # ✅ Ensure YOLO was called
+        # Verify that POST was called
         mock_post.assert_called_once()
 
-        # ✅ Ensure user got a fallback message
+        # Ensure both message and photo were sent
         self.assertTrue(self.bot.telegram_bot_client.send_message.called)
-        sent_text = self.bot.telegram_bot_client.send_message.call_args[0][1].lower()
-        self.assertIn("failed", sent_text)
+        self.assertTrue(self.bot.telegram_bot_client.send_photo.called)
+
+        # Check labels in the message
+        message_text = self.bot.telegram_bot_client.send_message.call_args[0][1].lower()
+        self.assertIn('cat', message_text)
+        self.assertIn('dog', message_text)
 
 
 if __name__ == '__main__':
