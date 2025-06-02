@@ -189,7 +189,7 @@ class ImageProcessingBot(Bot):
                 return
 
             predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
-            predicted_response = requests.get(predicted_image_url)
+            predicted_response = requests.get(predicted_image_url, headers={"Accept": "image/jpeg"})
             predicted_response.raise_for_status()
 
             predicted_img_path = f"{timestamp}_predicted.jpg"
