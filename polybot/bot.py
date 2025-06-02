@@ -43,7 +43,7 @@ class Bot:
             with open(file_info.file_path, 'wb') as photo:
                 photo.write(data)
 
-            return file_info.file_path  # ✅ Inside try block
+            return file_info.file_path
 
         except OSError as e:
             logger.error(f"File saving error: {e}")
@@ -53,7 +53,6 @@ class Bot:
     def send_photo(self, chat_id, img_path):
         if not os.path.exists(img_path):
             raise RuntimeError("Image path doesn't exist")
-
         self.telegram_bot_client.send_photo(chat_id, InputFile(img_path))
 
     def handle_message(self, msg):
@@ -75,7 +74,7 @@ class ImageProcessingBot(Bot):
         self.yolo_service_url = yolo_service_url
 
     def upload_file_to_s3(self, local_path, bucket_name, s3_key):
-        logger.info("\U0001F4E6 Preparing upload to S3")
+        logger.info("📦 Preparing upload to S3")
 
         if not os.path.exists(local_path):
             logger.error(f"❌ File not found: {local_path}")
@@ -155,8 +154,6 @@ class ImageProcessingBot(Bot):
 
             filtered_path = img.save_img()
             logger.info(f"🖼️ Filter applied: {caption} → Saved locally at {filtered_path}")
-
-            # ⛔️ DO NOT upload to S3 for filtered images
             self.send_photo(chat_id, str(filtered_path))
 
         except Exception:
@@ -173,11 +170,9 @@ class ImageProcessingBot(Bot):
             user_id = chat_id
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
-            # Upload original image to S3
             original_s3_key = f"original/{user_id}/{timestamp}-{os.path.basename(photo_path)}"
             self.upload_file_to_s3(photo_path, bucket_name, original_s3_key)
 
-            # Send to YOLO service with user_id header
             with open(photo_path, "rb") as f:
                 files = {"file": (os.path.basename(photo_path), f, "image/jpeg")}
                 headers = {"X-User-ID": str(user_id)}
@@ -193,7 +188,6 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "No objects detected.")
                 return
 
-            # Download predicted image
             predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
             predicted_response = requests.get(predicted_image_url)
             predicted_response.raise_for_status()
@@ -202,11 +196,9 @@ class ImageProcessingBot(Bot):
             with open(predicted_img_path, 'wb') as f:
                 f.write(predicted_response.content)
 
-            # Upload predicted image to S3
             predicted_s3_key = f"predicted/{user_id}/{predicted_img_path}"
             self.upload_file_to_s3(predicted_img_path, bucket_name, predicted_s3_key)
 
-            # Send results to Telegram user
             result_text = "Detected objects:\n" + "\n".join(labels)
             self.send_text(chat_id, result_text)
             self.send_photo(chat_id, predicted_img_path)
