@@ -58,6 +58,7 @@ jobs:
             if [ -d "PolybotServicePython" ]; then
               cd PolybotServicePython
               git fetch origin main
+              sudo rm -rf photos/
               git reset --hard origin/main
               git clean -fd
             else
