@@ -106,13 +106,13 @@ class TestBot(unittest.TestCase):
     @patch('polybot.bot.Bot.download_user_photo')
     @patch('polybot.bot.open', new_callable=mock_open, read_data=b'image-bytes')
     @patch('polybot.bot.os.path.exists', return_value=True)
-    def test_yolo_filter(self, mock_exists, mock_file, mock_download, mock_post):
+    def test_yolo_filter(self, mock_exists, mock_file, mock_download_photo, mock_post):
         mock_msg['caption'] = 'yolo'
 
-        # Mock download_user_photo to return a fake photo path
-        mock_download.return_value = 'mock_photo.jpg'
+        # ✅ Make sure photo path is returned (instead of triggering file system error)
+        mock_download_photo.return_value = 'mock_photo.jpg'
 
-        # Mock the POST /predict response from YOLO
+        # ✅ Mock the YOLO prediction response
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'labels': ['cat', 'dog'],
@@ -120,29 +120,29 @@ class TestBot(unittest.TestCase):
             'uid': 'mock-uid-123'
         }
 
-        # Mock Telegram bot methods
+        # ✅ Mock Telegram send methods
         self.bot.telegram_bot_client.send_message = MagicMock()
         self.bot.telegram_bot_client.send_photo = MagicMock()
 
-        # Run the handler
+        # ✅ Trigger the bot
         self.bot.handle_message(mock_msg)
 
-        # ✅ Ensure the YOLO endpoint was called
+        # 🔍 Check request.post called once
         mock_post.assert_called_once()
 
-        # ✅ Check messages
-        self.assertTrue(self.bot.telegram_bot_client.send_message.called, "send_message() was not called")
-        self.assertTrue(self.bot.telegram_bot_client.send_photo.called, "send_photo() was not called")
+        # ✅ Check if messages were sent
+        self.assertTrue(self.bot.telegram_bot_client.send_message.called, "send_message() not called")
+        self.assertTrue(self.bot.telegram_bot_client.send_photo.called, "send_photo() not called")
 
-        # ✅ Ensure photo was sent using the predicted URL
-        args, kwargs = self.bot.telegram_bot_client.send_photo.call_args
+        # ✅ Validate the image was sent with correct URL
+        args, _ = self.bot.telegram_bot_client.send_photo.call_args
         self.assertEqual(args[0], mock_msg['chat']['id'])
         self.assertIn("https://mock-s3-url.com/predicted.jpg", args[1])
 
-        # ✅ Validate labels in the message text
-        message_text = self.bot.telegram_bot_client.send_message.call_args[0][1].lower()
-        self.assertIn('cat', message_text)
-        self.assertIn('dog', message_text)
+        # ✅ Validate the label message
+        sent_msg = self.bot.telegram_bot_client.send_message.call_args[0][1].lower()
+        self.assertIn("cat", sent_msg)
+        self.assertIn("dog", sent_msg)
 
 
 if __name__ == '__main__':
