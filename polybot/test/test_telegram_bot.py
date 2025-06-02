@@ -100,8 +100,12 @@ class TestBot(unittest.TestCase):
         contains_retry = any(keyword in text.lower() for keyword in retry_keywords)
         self.assertTrue(contains_retry, f"Error message was not sent to the user. Make sure your message contains one of {retry_keywords}")
 
+    from unittest.mock import patch, MagicMock, mock_open
+
     @patch('polybot.bot.requests.post')
-    def test_yolo_filter(self, mock_post):
+    @patch('polybot.bot.open', new_callable=mock_open, read_data=b'image-bytes')
+    @patch('polybot.bot.os.path.exists', return_value=True)
+    def test_yolo_filter(self, mock_exists, mock_file, mock_post):
         mock_msg['caption'] = 'yolo'
 
         # Mock the POST /predict response from YOLO
