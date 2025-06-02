@@ -101,10 +101,14 @@ class TestBot(unittest.TestCase):
         self.assertTrue(contains_retry, f"Error message was not sent to the user. Make sure your message contains one of {retry_keywords}")
 
     @patch('polybot.bot.requests.post')
-    def test_yolo_filter(self, mock_post):
+    @patch.object(ImageProcessingBot, 'upload_file_to_s3')
+    def test_yolo_filter(self, mock_upload, mock_post):
         mock_msg['caption'] = 'yolo'
 
-        # Mock YOLO response
+        # Pretend image uploaded successfully and returned this path
+        mock_upload.return_value = 'photos/beatles.jpeg'
+
+        # Mock YOLO POST /predict response
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'labels': ['cat', 'dog'],
@@ -112,23 +116,18 @@ class TestBot(unittest.TestCase):
             'uid': 'mock-uid-123'
         }
 
-        # Mock Telegram interactions
         self.bot.telegram_bot_client.send_message = MagicMock()
         self.bot.telegram_bot_client.send_photo = MagicMock()
 
         self.bot.handle_message(mock_msg)
 
-        # Verify that POST was called
         mock_post.assert_called_once()
-
-        # Ensure both message and photo were sent
         self.assertTrue(self.bot.telegram_bot_client.send_message.called)
         self.assertTrue(self.bot.telegram_bot_client.send_photo.called)
 
-        # Check labels in the message
-        message_text = self.bot.telegram_bot_client.send_message.call_args[0][1].lower()
-        self.assertIn('cat', message_text)
-        self.assertIn('dog', message_text)
+        text = self.bot.telegram_bot_client.send_message.call_args[0][1].lower()
+        self.assertIn('cat', text)
+        self.assertIn('dog', text)
 
 
 if __name__ == '__main__':
