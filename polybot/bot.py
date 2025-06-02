@@ -170,9 +170,11 @@ class ImageProcessingBot(Bot):
             user_id = chat_id
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
+            # Upload original image to S3
             original_s3_key = f"original/{user_id}/{timestamp}-{os.path.basename(photo_path)}"
             self.upload_file_to_s3(photo_path, bucket_name, original_s3_key)
 
+            # Send image to YOLO service
             with open(photo_path, "rb") as f:
                 files = {"file": (os.path.basename(photo_path), f, "image/jpeg")}
                 headers = {"X-User-ID": str(user_id)}
@@ -184,10 +186,11 @@ class ImageProcessingBot(Bot):
 
             labels = result.get("labels", [])
             prediction_uid = result.get("prediction_uid")
-            if not labels:
+            if not labels or not prediction_uid:
                 self.send_text(chat_id, "No objects detected.")
                 return
 
+            # Download predicted image with correct Accept header
             predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
             predicted_response = requests.get(predicted_image_url, headers={"Accept": "image/jpeg"})
             predicted_response.raise_for_status()
@@ -196,13 +199,20 @@ class ImageProcessingBot(Bot):
             with open(predicted_img_path, 'wb') as f:
                 f.write(predicted_response.content)
 
+            # Upload predicted image to S3
             predicted_s3_key = f"predicted/{user_id}/{predicted_img_path}"
             self.upload_file_to_s3(predicted_img_path, bucket_name, predicted_s3_key)
 
+            # Send detection result
             result_text = "Detected objects:\n" + "\n".join(labels)
             self.send_text(chat_id, result_text)
+            time.sleep(1)  # Prevent hitting Telegram's 429 limit
             self.send_photo(chat_id, predicted_img_path)
 
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Request to YOLO service failed: {e}")
+            self.send_text(chat_id, "YOLO service is not available right now.")
+
         except Exception as e:
-            logger.error(f"YOLO prediction failed: {e}")
+            logger.exception("YOLO prediction failed")
             self.send_text(chat_id, "Failed to process image with YOLO.")
