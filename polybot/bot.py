@@ -153,7 +153,9 @@ class ImageProcessingBot(Bot):
                 return
 
             filtered_path = img.save_img()
+            logger.info(f"🖼️ Filter applied: {caption} → Saved locally at {filtered_path}")
             self.send_photo(chat_id, str(filtered_path))
+
         except Exception:
             logger.exception("Filter application failed")
             self.send_text(chat_id, "Failed to apply the selected filter.")
