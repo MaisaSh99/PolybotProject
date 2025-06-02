@@ -101,14 +101,18 @@ class TestBot(unittest.TestCase):
         self.assertTrue(contains_retry, f"Error message was not sent to the user. Make sure your message contains one of {retry_keywords}")
 
     @patch('polybot.bot.requests.post')
-    @patch.object(ImageProcessingBot, 'upload_file_to_s3')
-    def test_yolo_filter(self, mock_upload, mock_post):
+    @patch('polybot.bot.ImageProcessingBot.upload_file_to_s3')
+    @patch('polybot.bot.ImageProcessingBot.download_user_photo')
+    def test_yolo_filter(self, mock_download, mock_upload, mock_post):
         mock_msg['caption'] = 'yolo'
 
-        # Pretend image uploaded successfully and returned this path
-        mock_upload.return_value = 'photos/beatles.jpeg'
+        # Simulate that download_user_photo succeeded and returned path
+        mock_download.return_value = 'photos/beatles.jpeg'
 
-        # Mock YOLO POST /predict response
+        # Simulate upload to S3 (we don't care about the result)
+        mock_upload.return_value = 's3://mock-bucket/original/photo.jpeg'
+
+        # Simulate YOLO service response
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'labels': ['cat', 'dog'],
@@ -116,6 +120,7 @@ class TestBot(unittest.TestCase):
             'uid': 'mock-uid-123'
         }
 
+        # Mock Telegram responses
         self.bot.telegram_bot_client.send_message = MagicMock()
         self.bot.telegram_bot_client.send_photo = MagicMock()
 
@@ -125,9 +130,9 @@ class TestBot(unittest.TestCase):
         self.assertTrue(self.bot.telegram_bot_client.send_message.called)
         self.assertTrue(self.bot.telegram_bot_client.send_photo.called)
 
-        text = self.bot.telegram_bot_client.send_message.call_args[0][1].lower()
-        self.assertIn('cat', text)
-        self.assertIn('dog', text)
+        message_text = self.bot.telegram_bot_client.send_message.call_args[0][1].lower()
+        self.assertIn('cat', message_text)
+        self.assertIn('dog', message_text)
 
 
 if __name__ == '__main__':
