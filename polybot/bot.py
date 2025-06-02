@@ -1,3 +1,4 @@
+import shutil
 import string
 import threading
 import telebot
@@ -36,15 +37,16 @@ class Bot:
         try:
             file_info = self.telegram_bot_client.get_file(msg['photo'][-1]['file_id'])
             data = self.telegram_bot_client.download_file(file_info.file_path)
-            folder_name = file_info.file_path.split('/')[0]
 
-            if not os.path.exists(folder_name):
-                os.makedirs(folder_name)
+            filename = os.path.basename(file_info.file_path)
+            output_dir = "/home/maisa/PycharmProjects/yoloService/uploads/original"
+            os.makedirs(output_dir, exist_ok=True)
 
-            with open(file_info.file_path, 'wb') as photo:
+            photo_path = os.path.join(output_dir, filename)
+            with open(photo_path, 'wb') as photo:
                 photo.write(data)
 
-            return file_info.file_path  # ✅ Inside try block
+            return photo_path
 
         except OSError as e:
             logger.error(f"File saving error: {e}")
@@ -161,11 +163,18 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, f"Unknown filter '{caption}'.")
                 return
 
+            # Save the filtered image
             filtered_path = img.save_img()
             logger.info(f"🖼️ Filter applied: {caption} → Saved locally at {filtered_path}")
 
-            # ⛔️ DO NOT upload to S3 for filtered images
-            self.send_photo(chat_id, str(filtered_path))
+            # ✅ Move to predicted/ folder
+            predicted_dir = "/home/maisa/PycharmProjects/yoloService/uploads/predicted"
+            os.makedirs(predicted_dir, exist_ok=True)
+            new_location = os.path.join(predicted_dir, os.path.basename(filtered_path))
+            shutil.move(str(filtered_path), new_location)
+
+            # ✅ Send from predicted location
+            self.send_photo(chat_id, new_location)
 
         except Exception:
             logger.exception("Filter application failed")
