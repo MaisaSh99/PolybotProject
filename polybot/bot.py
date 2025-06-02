@@ -154,6 +154,8 @@ class ImageProcessingBot(Bot):
 
             filtered_path = img.save_img()
             logger.info(f"🖼️ Filter applied: {caption} → Saved locally at {filtered_path}")
+
+            # ⛔️ DO NOT upload to S3 for filtered images
             self.send_photo(chat_id, str(filtered_path))
 
         except Exception:
@@ -170,12 +172,16 @@ class ImageProcessingBot(Bot):
             user_id = chat_id
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
-            # Upload original image
+            # Upload original image to S3
             original_s3_key = f"original/{user_id}/{timestamp}-{os.path.basename(photo_path)}"
             self.upload_file_to_s3(photo_path, bucket_name, original_s3_key)
 
-            # Send to YOLO service
-            response = requests.post(f"{self.yolo_service_url}/predict", json={"image_name": original_s3_key})
+            # Send to YOLO service with user_id header
+            with open(photo_path, "rb") as f:
+                files = {"file": (os.path.basename(photo_path), f, "image/jpeg")}
+                headers = {"X-User-ID": str(user_id)}
+                response = requests.post(f"{self.yolo_service_url}/predict", files=files, headers=headers)
+
             response.raise_for_status()
             result = response.json()
             logger.info(f"YOLO raw response: {result}")
@@ -195,11 +201,11 @@ class ImageProcessingBot(Bot):
             with open(predicted_img_path, 'wb') as f:
                 f.write(predicted_response.content)
 
-            # Upload predicted image
+            # Upload predicted image to S3
             predicted_s3_key = f"predicted/{user_id}/{predicted_img_path}"
             self.upload_file_to_s3(predicted_img_path, bucket_name, predicted_s3_key)
 
-            # Respond to user
+            # Send results to Telegram user
             result_text = "Detected objects:\n" + "\n".join(labels)
             self.send_text(chat_id, result_text)
             self.send_photo(chat_id, predicted_img_path)
@@ -207,3 +213,4 @@ class ImageProcessingBot(Bot):
         except Exception as e:
             logger.error(f"YOLO prediction failed: {e}")
             self.send_text(chat_id, "Failed to process image with YOLO.")
+
