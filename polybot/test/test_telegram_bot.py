@@ -106,13 +106,11 @@ class TestBot(unittest.TestCase):
     def test_yolo_filter(self, mock_download, mock_upload, mock_post):
         mock_msg['caption'] = 'yolo'
 
-        # Simulate that download_user_photo succeeded and returned path
+        # Bypass file system write error in test
         mock_download.return_value = 'photos/beatles.jpeg'
 
-        # Simulate upload to S3 (we don't care about the result)
         mock_upload.return_value = 's3://mock-bucket/original/photo.jpeg'
 
-        # Simulate YOLO service response
         mock_post.return_value.status_code = 200
         mock_post.return_value.json.return_value = {
             'labels': ['cat', 'dog'],
@@ -120,13 +118,16 @@ class TestBot(unittest.TestCase):
             'uid': 'mock-uid-123'
         }
 
-        # Mock Telegram responses
+        # Mocks for bot responses
         self.bot.telegram_bot_client.send_message = MagicMock()
         self.bot.telegram_bot_client.send_photo = MagicMock()
 
         self.bot.handle_message(mock_msg)
 
+        # Ensure YOLO endpoint was called
         mock_post.assert_called_once()
+
+        # Validate message and photo response
         self.assertTrue(self.bot.telegram_bot_client.send_message.called)
         self.assertTrue(self.bot.telegram_bot_client.send_photo.called)
 
