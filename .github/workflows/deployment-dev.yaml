@@ -29,34 +29,42 @@ jobs:
           echo "$PRIVATE_KEY" > key.pem
           chmod 600 key.pem
 
-      - name: Upload service files
+      - name: Upload service file
         run: |
           scp -i key.pem -o StrictHostKeyChecking=no polybot-dev.service $EC2_USER@$EC2_IP:~/polybot-dev.service
 
       - name: SSH and deploy
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << EOF
+          ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << 'EOF'
             set -e
+
+            echo "✅ Installing required packages..."
             sudo apt update
             sudo apt install -y git python3 python3-pip python3-venv curl unzip
 
+            echo "📥 Installing ngrok if not present..."
             if ! command -v ngrok &> /dev/null; then
               curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
               echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
               sudo apt update && sudo apt install -y ngrok
             fi
 
+            echo "🔐 Authenticating ngrok..."
             ngrok config add-authtoken $NGROK_DEV_AUTH_TOKEN
 
+            echo "📁 Cloning or updating repo..."
             cd /home/ubuntu
             if [ -d "PolybotServicePython" ]; then
               cd PolybotServicePython
-              git pull
+              git fetch origin dev
+              git reset --hard origin/dev
+              git clean -fd
             else
               git clone https://github.com/${REPO}.git PolybotServicePython
               cd PolybotServicePython
             fi
 
+            echo "📦 Setting up Python venv..."
             if [ ! -d "venv" ]; then
               python3 -m venv venv
             fi
@@ -64,12 +72,21 @@ jobs:
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
 
+            echo "⚙️ Installing and starting services..."
             sudo mv ~/polybot-dev.service /etc/systemd/system/polybot-dev.service
             sudo systemctl daemon-reload
             sudo systemctl restart polybot-dev.service
             sudo systemctl enable polybot-dev.service
 
-            sleep 10
+            echo "🌐 Waiting for ngrok tunnel to become ready..."
+            for i in {1..10}; do
+              curl --silent --fail "$NGROK_DOMAIN" && break
+              sleep 2
+            done
+
+            echo "📡 Setting Telegram webhook..."
             curl -X POST https://api.telegram.org/bot$BOT_DEV_TOKEN/setWebhook \
               -d "url=$NGROK_DOMAIN"
+
+            echo "✅ Development deployment and webhook setup complete!"
           EOF
