@@ -43,7 +43,8 @@ class Bot:
             with open(file_info.file_path, 'wb') as photo:
                 photo.write(data)
 
-            return file_info.file_path
+            return file_info.file_path  # ✅ Inside try block
+
         except OSError as e:
             logger.error(f"File saving error: {e}")
             self.send_text(msg['chat']['id'], "Something went wrong, try again please.")
