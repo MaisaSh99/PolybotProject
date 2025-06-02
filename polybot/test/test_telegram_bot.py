@@ -35,13 +35,12 @@ mock_msg = {
             'width': 320,
             'height': 320
         },
-        {
-            'file_id': 'AgACAgQAAxkDAAIBXWS89nwr4unzj72WKH0XpwLdcrzqAAIBvzEbx73gUbDHoYwLMSkCAQADAgADeAADLwQ',
-            'file_unique_id': 'AQADAb8xG8e94FF9',
-            'file_size': 99929,
-            'width': 660,
-            'height': 660
-        }
+        {'file_id': 'AgACAgQAAxkDAAIBXWS89nwr4unzj72WKH0XpwLdcrzqAAIBvzEbx73gUbDHoYwLMSkCAQADAgADeAADLwQ',
+         'file_unique_id': 'AQADAb8xG8e94FF9',
+         'file_size': 99929,
+         'width': 660,
+         'height': 660
+         }
     ],
     'caption': 'Rotate'
 }
