@@ -103,10 +103,14 @@ class TestBot(unittest.TestCase):
     from unittest.mock import patch, MagicMock, mock_open
 
     @patch('polybot.bot.requests.post')
+    @patch('polybot.bot.Bot.download_user_photo')
     @patch('polybot.bot.open', new_callable=mock_open, read_data=b'image-bytes')
     @patch('polybot.bot.os.path.exists', return_value=True)
-    def test_yolo_filter(self, mock_exists, mock_file, mock_post):
+    def test_yolo_filter(self, mock_exists, mock_file, mock_download, mock_post):
         mock_msg['caption'] = 'yolo'
+
+        # Mock download_user_photo to return a fake photo path
+        mock_download.return_value = 'mock_photo.jpg'
 
         # Mock the POST /predict response from YOLO
         mock_post.return_value.status_code = 200
@@ -116,14 +120,14 @@ class TestBot(unittest.TestCase):
             'uid': 'mock-uid-123'
         }
 
-        # Ensure Telegram bot methods are mocked
+        # Mock Telegram bot methods
         self.bot.telegram_bot_client.send_message = MagicMock()
         self.bot.telegram_bot_client.send_photo = MagicMock()
 
         # Run the handler
         self.bot.handle_message(mock_msg)
 
-        # Ensure the post was called to YOLO
+        # ✅ Ensure the YOLO endpoint was called
         mock_post.assert_called_once()
 
         # ✅ Check messages
