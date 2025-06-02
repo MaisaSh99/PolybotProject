@@ -33,7 +33,6 @@ jobs:
       - name: Upload service files
         run: |
           scp -i key.pem -o StrictHostKeyChecking=no polybot-prod.service $EC2_USER@$EC2_IP:~/polybot-prod.service
-          scp -i key.pem -o StrictHostKeyChecking=no ngrok-prod.service $EC2_USER@$EC2_IP:~/ngrok-prod.service
 
       - name: SSH and deploy
         run: |
@@ -72,12 +71,9 @@ jobs:
 
             echo "⚙️ Installing and starting services..."
             sudo mv ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
-            sudo mv ~/ngrok-prod.service /etc/systemd/system/ngrok-prod.service
             sudo systemctl daemon-reload
             sudo systemctl restart polybot-prod.service
-            sudo systemctl restart ngrok-prod.service
             sudo systemctl enable polybot-prod.service
-            sudo systemctl enable ngrok-prod.service
 
             echo "🌐 Waiting for ngrok tunnel..."
             sleep 10
