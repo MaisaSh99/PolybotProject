@@ -76,6 +76,9 @@ jobs:
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
 
+            echo "🧼 Killing rogue processes..."
+            pkill -f "polybot.app" || true
+
             echo "⚙️ Installing and starting systemd service..."
             sudo mv ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
             sudo systemctl daemon-reload
@@ -95,7 +98,10 @@ jobs:
               exit 1
             fi
 
-            echo "📡 Setting Telegram webhook..."
+            echo "🚫 Deleting old Telegram webhook..."
+            curl -X POST https://api.telegram.org/bot$BOT_PROD_TOKEN/deleteWebhook
+
+            echo "📡 Setting new Telegram webhook..."
             curl -X POST https://api.telegram.org/bot$BOT_PROD_TOKEN/setWebhook \
               -d "url=$NGROK_DOMAIN"
 
