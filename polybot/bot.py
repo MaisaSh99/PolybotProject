@@ -213,6 +213,7 @@ class ImageProcessingBot(Bot):
             logger.error(f"Request to YOLO service failed: {e}")
             self.send_text(chat_id, "YOLO service is not available right now.")
 
-        except Exception as e:
+        except Exception:
             logger.exception("YOLO prediction failed")
             self.send_text(chat_id, "Failed to process image with YOLO.")
+
