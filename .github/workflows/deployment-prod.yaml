@@ -77,7 +77,7 @@ jobs:
             pip install -r polybot/requirements.txt
 
             echo "🧼 Killing rogue processes..."
-            pkill -f "polybot.app" || true
+            sudo pkill -f "polybot.app" || true
 
             echo "⚙️ Installing and starting systemd service..."
             sudo mv ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
