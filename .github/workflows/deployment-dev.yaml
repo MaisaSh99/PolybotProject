@@ -26,10 +26,10 @@ jobs:
 
       - name: Set up SSH key
         run: |
-          echo "$PRIVATE_KEY" > key.pem
+          echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
-      - name: Upload service file
+      - name: Upload systemd service file
         run: |
           scp -i key.pem -o StrictHostKeyChecking=no polybot-dev.service $EC2_USER@$EC2_IP:~/polybot-dev.service
 
@@ -65,17 +65,19 @@ jobs:
             fi
 
             echo "📦 Setting up Python venv..."
-            if [ ! -d "venv" ]; then
-              python3 -m venv venv
+            if [ -d "venv" ]; then
+              echo "🧹 Removing old venv..."
+              rm -rf venv
             fi
+            python3 -m venv venv
             source venv/bin/activate
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
 
             echo "🧼 Killing rogue processes..."
-            pkill -f "polybot.app" || true
+            sudo pkill -f "polybot.app" || true
 
-            echo "⚙️ Installing and starting services..."
+            echo "⚙️ Installing and starting systemd service..."
             sudo mv ~/polybot-dev.service /etc/systemd/system/polybot-dev.service
             sudo systemctl daemon-reload
             sudo systemctl restart polybot-dev.service
@@ -83,9 +85,16 @@ jobs:
 
             echo "🌐 Waiting for ngrok tunnel to become ready..."
             for i in {1..10}; do
-              curl --silent --fail "$NGROK_DOMAIN" && break
+              if curl --silent --fail "$NGROK_DOMAIN"; then
+                break
+              fi
               sleep 2
             done
+
+            if ! curl --silent --fail "$NGROK_DOMAIN"; then
+              echo "❌ Ngrok tunnel is not ready. Aborting deployment."
+              exit 1
+            fi
 
             echo "🚫 Deleting old Telegram webhook..."
             curl -X POST https://api.telegram.org/bot$BOT_DEV_TOKEN/deleteWebhook
