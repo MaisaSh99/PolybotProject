@@ -14,9 +14,26 @@ from datetime import datetime, timezone
 class Bot:
     def __init__(self, token, telegram_chat_url):
         self.telegram_bot_client = telebot.TeleBot(token)
-        self.telegram_bot_client.remove_webhook()
-        time.sleep(0.5)
-        self.telegram_bot_client.set_webhook(url=f'{telegram_chat_url}/{token}/', timeout=60)
+
+        try:
+            self.telegram_bot_client.remove_webhook()
+            time.sleep(0.5)
+            self.telegram_bot_client.set_webhook(
+                url=f'{telegram_chat_url}/{token}/',
+                timeout=60
+            )
+        except telebot.apihelper.ApiTelegramException as e:
+            if e.result.status_code == 429:
+                wait_time = int(e.result.json().get("parameters", {}).get("retry_after", 3))
+                logger.warning(f"⚠️ Rate limit: retry after {wait_time}s")
+                time.sleep(wait_time)
+                self.telegram_bot_client.set_webhook(
+                    url=f'{telegram_chat_url}/{token}/',
+                    timeout=60
+                )
+            else:
+                raise
+
         logger.info(f'Telegram Bot information\n\n{self.telegram_bot_client.get_me()}')
 
     def send_text(self, chat_id, text):
@@ -37,8 +54,7 @@ class Bot:
             data = self.telegram_bot_client.download_file(file_info.file_path)
             folder_name = file_info.file_path.split('/')[0]
 
-            if not os.path.exists(folder_name):
-                os.makedirs(folder_name)
+            os.makedirs(folder_name, exist_ok=True)
 
             with open(file_info.file_path, 'wb') as photo:
                 photo.write(data)
@@ -84,7 +100,7 @@ class ImageProcessingBot(Bot):
         try:
             logger.info(f"⬆️ Uploading {local_path} to s3://{bucket_name}/{s3_key}")
             s3.upload_file(local_path, bucket_name, s3_key)
-            logger.info("✅ Upload successful!")
+            logger.info("✅ File uploaded to S3.")
         except Exception as e:
             logger.error(f"❌ Upload to S3 failed: {e}")
 
@@ -170,11 +186,9 @@ class ImageProcessingBot(Bot):
             user_id = chat_id
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
-            # Upload original image to S3
             original_s3_key = f"original/{user_id}/{timestamp}-{os.path.basename(photo_path)}"
             self.upload_file_to_s3(photo_path, bucket_name, original_s3_key)
 
-            # Send image to YOLO service
             with open(photo_path, "rb") as f:
                 files = {"file": (os.path.basename(photo_path), f, "image/jpeg")}
                 headers = {"X-User-ID": str(user_id)}
@@ -190,7 +204,6 @@ class ImageProcessingBot(Bot):
                 self.send_text(chat_id, "No objects detected.")
                 return
 
-            # Download predicted image with correct Accept header
             predicted_image_url = f"{self.yolo_service_url}/prediction/{prediction_uid}/image"
             predicted_response = requests.get(predicted_image_url, headers={"Accept": "image/jpeg"})
             predicted_response.raise_for_status()
@@ -199,14 +212,12 @@ class ImageProcessingBot(Bot):
             with open(predicted_img_path, 'wb') as f:
                 f.write(predicted_response.content)
 
-            # Upload predicted image to S3
             predicted_s3_key = f"predicted/{user_id}/{predicted_img_path}"
             self.upload_file_to_s3(predicted_img_path, bucket_name, predicted_s3_key)
 
-            # Send detection result
             result_text = "Detected objects:\n" + "\n".join(labels)
             self.send_text(chat_id, result_text)
-            time.sleep(1)  # Prevent hitting Telegram's 429 limit
+            time.sleep(1)
             self.send_photo(chat_id, predicted_img_path)
 
         except requests.exceptions.RequestException as e:

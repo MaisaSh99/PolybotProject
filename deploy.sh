@@ -1,47 +1,54 @@
 #!/bin/bash
+set -e
 
-# === Configuration ===
-EC2_USER=ubuntu
-EC2_HOST="3.142.108.226"
-KEY_PATH="/home/maisa/Desktop/m-polybot-key.pem"
+echo "📦 Installing system packages..."
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv git
+
+cd ~
+REPO_NAME="PolybotProject"
 REPO_URL="https://github.com/MaisaSh99/PolybotProject.git"
-REPO_DIR="PolybotServicePython"
 
-# === Start Deployment ===
-echo "➡️ Connecting to $EC2_USER@$EC2_HOST..."
+echo "📁 Cloning or pulling latest changes..."
+if [ -d "$REPO_NAME" ]; then
+    cd "$REPO_NAME"
+    git reset --hard
+    git clean -fd
+    git checkout main
+    git pull origin main
+else
+    git clone -b main "$REPO_URL"
+    cd "$REPO_NAME"
+fi
 
-ssh -i "$KEY_PATH" -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << EOF
-  echo "✅ Updating and installing base system packages..."
-  sudo apt update
-  sudo apt install -y git python3 python3-pip python3-venv
-
-  echo "📁 Preparing repo..."
-  if [ -d "$REPO_DIR" ]; then
-    echo "Repo exists. Pulling latest changes..."
-    cd "$REPO_DIR"
-    git pull
-  else
-    echo "Cloning repo from GitHub..."
-    git clone $REPO_URL "$REPO_DIR"
-    cd "$REPO_DIR"
-  fi
-
-  echo "⚙️ Setting up polybot systemd service..."
-  sudo cp polybot.service /etc/systemd/system/polybot.service
-
-  if [ ! -d "venv" ]; then
+if [ ! -d "venv" ]; then
     echo "📦 Creating Python virtual environment..."
     python3 -m venv venv
-  fi
+fi
 
-  source venv/bin/activate
-  pip install --upgrade pip
-  pip install -r polybot/requirements.txt
+source venv/bin/activate
 
-  echo "🔁 Reloading and restarting service..."
-  sudo systemctl daemon-reload
-  sudo systemctl restart polybot.service
-  sudo systemctl enable polybot.service
+export S3_BUCKET_NAME="maisa-polybot-images"
+pip install --upgrade pip
+pip install flask
+pip install -r polybot/requirements.txt
+pip install .
 
-  echo "✅ Deployment complete and service running!"
-EOF
+echo "🛑 Stopping old service and killing port 8443..."
+sudo systemctl stop polybot-prod.service || true
+sudo fuser -k 8443/tcp || true
+sleep 2
+
+echo "⚙️ Copying and enabling Polybot production service..."
+sudo cp ~/polybot-prod.service /etc/systemd/system/polybot.service
+sudo systemctl daemon-reload
+sudo systemctl enable polybot.service
+sudo systemctl restart polybot.service
+
+echo "⏱ Waiting for service to be ready..."
+sleep 5  # Give extra time for health check route to become live
+
+echo "📊 Checking Polybot production service status..."
+sudo systemctl status polybot.service || (journalctl -u polybot.service -n 50 --no-pager && exit 1)
+
+echo "✅ Polybot production service deployed and running!"
