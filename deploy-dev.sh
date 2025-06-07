@@ -37,6 +37,7 @@ pip install .
 echo "🛑 Stopping old service and killing port 8443..."
 sudo systemctl stop polybot-dev.service || true
 sudo fuser -k 8443/tcp || true
+sleep 2
 
 echo "⚙️ Copying and enabling Polybot dev service..."
 sudo cp ~/polybot-dev.service /etc/systemd/system/polybot-dev.service
@@ -44,8 +45,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable polybot-dev.service
 sudo systemctl restart polybot-dev.service
 
-echo "⏱ Checking Polybot dev service status..."
-sleep 3
+echo "⏱ Waiting for service to be ready..."
+sleep 5  # Give extra time for health check route to become live
+
+echo "📊 Checking Polybot production service status..."
 sudo systemctl status polybot-dev.service || (journalctl -u polybot-dev.service -n 50 --no-pager && exit 1)
 
 echo "✅ Polybot dev service deployed and running!"
