@@ -57,16 +57,16 @@ jobs:
               git checkout main
               git pull origin main
             else
-              git clone https://github.com/${REPO}.git PolybotProject
+              git clone --depth 1 https://github.com/MaisaSh99/PolybotProject.git PolybotProject || (sleep 3 && git clone --depth 1 https://github.com/MaisaSh99/PolybotProject.git PolybotProject)
               cd PolybotProject
               git checkout main
             fi
 
             echo "📦 Setting up Python venv..."
-            if [ -d "venv" ]; then
-              rm -rf venv
+            if [ ! -d "venv" ]; then
+              echo "📦 Creating Python virtual environment..."
+              python3 -m venv venv
             fi
-            python3 -m venv venv
             source venv/bin/activate
             export S3_BUCKET_NAME="maisa-polybot-images"
             pip install --upgrade pip
