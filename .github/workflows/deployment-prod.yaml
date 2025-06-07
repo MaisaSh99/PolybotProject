@@ -30,9 +30,11 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
-      - name: Upload systemd service file
+      - name: Upload service and observability files
         run: |
-          scp -i key.pem -o StrictHostKeyChecking=no polybot-prod.service $EC2_USER@$EC2_IP:~/polybot-prod.service
+          scp -i key.pem -o StrictHostKeyChecking=no \
+            polybot-prod.service install_otelcol.sh install_prometheus.sh otelcol-config.yaml \
+            $EC2_USER@$EC2_IP:~/
 
       - name: SSH and deploy
         run: |
@@ -84,6 +86,10 @@ jobs:
             sudo systemctl daemon-reload
             sudo systemctl restart polybot-prod.service
             sudo systemctl enable polybot-prod.service
+
+            echo "📡 Installing observability components..."
+            bash ~/install_otelcol.sh
+            bash ~/install_prometheus.sh
 
             echo "🌐 Waiting for ngrok tunnel to become ready..."
             for i in {1..10}; do
