@@ -31,9 +31,11 @@ source venv/bin/activate
 export S3_BUCKET_NAME="maisa-polybot-images"
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install .
 
-echo "🛑 Stopping any service using port 8080..."
-sudo fuser -k 8080/tcp || true
+
+echo "🛑 Stopping any service using port 8443..."
+sudo fuser -k 8443/tcp || true
 
 echo "⚙️ Copying and enabling Polybot production service..."
 sudo cp ~/polybot-prod.service /etc/systemd/system/polybot.service
