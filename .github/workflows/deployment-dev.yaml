@@ -65,7 +65,7 @@ jobs:
             source venv/bin/activate
             export S3_BUCKET_NAME="maisa-dev-bucket"
             pip install --upgrade pip
-            pip install -r requirements.txt
+            pip install -r polybot/requirements.txt
 
             echo "📊 Installing OpenTelemetry & Prometheus..."
             chmod +x ~/install_otelcol.sh ~/install_prometheus.sh
