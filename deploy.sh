@@ -43,12 +43,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable polybot.service
 sudo systemctl restart polybot.service
 
-echo "🌐 Waiting for ngrok tunnel..."
+echo "🌐 Waiting for ngrok tunnel on port 8443..."
 max_retries=10
 retry_delay=3
 attempt=1
 while [ $attempt -le $max_retries ]; do
-  if curl -s http://localhost:4040/api/tunnels | grep -q "public_url"; then
+  if curl -s http://localhost:4040/api/tunnels | jq -r '.tunnels[] | select(.config.addr=="https://localhost:8443") | .public_url' | grep -q "https"; then
     echo "✅ Ngrok tunnel is ready!"
     break
   fi
@@ -62,4 +62,4 @@ if [ $attempt -gt $max_retries ]; then
   exit 1
 fi
 
-echo "✅ Polybot Prod deployment complete!"
+echo "✅ Polybot Production deployment complete!"
