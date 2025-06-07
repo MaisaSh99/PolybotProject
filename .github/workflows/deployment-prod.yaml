@@ -81,6 +81,7 @@ jobs:
 
             echo "🧼 Killing old service if running..."
             sudo fuser -k 8080/tcp || true
+            sudo fuser -k 8443/tcp || true
             sudo systemctl stop polybot.service || true
 
             echo "⚙️ Enabling and starting polybot.service"
