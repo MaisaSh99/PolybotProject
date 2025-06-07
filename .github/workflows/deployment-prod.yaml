@@ -79,9 +79,12 @@ jobs:
             sudo -E ~/install_prometheus.sh
 
             echo "🧼 Killing old service if running..."
+            sudo systemctl stop polybot.service || true
+            sleep 2
             sudo fuser -k 8080/tcp || true
             sudo fuser -k 8443/tcp || true
-            sudo systemctl stop polybot.service || true
+            sleep 2
+
 
             echo "⚙️ Enabling and starting polybot.service"
             sudo mv ~/polybot-prod.service /etc/systemd/system/polybot.service
