@@ -16,8 +16,7 @@ jobs:
       EC2_IP: ${{ secrets.EC2_HOST }}
       EC2_USER: ${{ secrets.EC2_USER }}
       REPO: ${{ github.repository }}
-      BOT_PROD_TOKEN: ${{ secrets.BOT_PROD_TOKEN }}
-      NGROK_DOMAIN: "https://minnow-crucial-nicely.ngrok-free.app"
+      OTELCOL_IP: ${{ secrets.EC2_MONITORING_HOST }}
 
     steps:
       - name: Checkout repo
@@ -45,65 +44,60 @@ jobs:
               echo "🔒 Waiting for apt lock to be released..."
               sleep 3
             done
+
             sudo apt update
-            sudo apt install -y git python3 python3-pip python3-venv curl unzip wget
+            sudo apt install -y git python3 python3-pip python3-venv wget curl unzip
 
             echo "📁 Cloning or updating repo..."
             cd /home/ubuntu
-            if [ -d "PolybotServicePython" ]; then
-              cd PolybotServicePython
+            if [ -d "PolybotProject" ]; then
+              cd PolybotProject
               git reset --hard
               git clean -fd
               git checkout main
               git pull origin main
             else
-              git clone https://github.com/${REPO}.git PolybotServicePython
-              cd PolybotServicePython
+              git clone https://github.com/${REPO}.git PolybotProject
+              cd PolybotProject
               git checkout main
             fi
 
             echo "📦 Setting up Python venv..."
-            if [ -d "venv" ]; then rm -rf venv; fi
+            if [ -d "venv" ]; then
+              rm -rf venv
+            fi
             python3 -m venv venv
             source venv/bin/activate
             export S3_BUCKET_NAME="maisa-polybot-images"
             pip install --upgrade pip
-            pip install -r polybot/requirements.txt
-            pip install boto3
+            pip install -r requirements.txt
 
             echo "📊 Installing OpenTelemetry & Prometheus..."
             chmod +x ~/install_otelcol.sh ~/install_prometheus.sh
-            sudo mkdir -p /etc/otelcol
             sudo mv ~/otelcol-config.yaml /etc/otelcol/config.yaml
-            export OTELCOL_IP="$EC2_IP"
+            export OTELCOL_IP="${OTELCOL_IP}"
             sudo -E ~/install_otelcol.sh
-            export OTELCOL_IP="10.0.1.143"
             sudo -E ~/install_prometheus.sh
 
-            echo "🧼 Killing old bot process..."
-            sudo pkill -f "polybot.app" || true
+            echo "🧼 Killing old service if running..."
+            sudo fuser -k 8080/tcp || true
+            sudo systemctl stop polybot.service || true
 
-            echo "⚙️ Starting Polybot systemd service..."
-            sudo mv ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
+            echo "⚙️ Enabling and starting polybot.service"
+            sudo mv ~/polybot-prod.service /etc/systemd/system/polybot.service
             sudo systemctl daemon-reload
-            sudo systemctl restart polybot-prod.service
-            sudo systemctl enable polybot-prod.service
+            sudo systemctl enable polybot.service
+            sudo systemctl restart polybot.service
 
-            echo "🌐 Waiting for ngrok tunnel..."
-            for i in {1..10}; do
-              if curl --silent --fail "$NGROK_DOMAIN"; then break; fi
-              sleep 2
-            done
-
-            if ! curl --silent --fail "$NGROK_DOMAIN"; then
-              echo "❌ Ngrok tunnel not ready."
+            echo "⏱ Waiting for service..."
+            sleep 10
+            if curl -s http://localhost:8443/health | grep -q "ok"; then
+              echo "✅ Health check passed."
+            else
+              echo "❌ Health check failed. Showing logs:"
+              journalctl -u polybot.service -n 30 --no-pager
               exit 1
             fi
 
-            echo "🔁 Resetting Telegram webhook..."
-            curl -X POST https://api.telegram.org/bot$BOT_PROD_TOKEN/deleteWebhook
-            curl -X POST https://api.telegram.org/bot$BOT_PROD_TOKEN/setWebhook \
-              -d "url=$NGROK_DOMAIN"
-
-            echo "✅ Polybot production deployed!"
+            echo "✅ Production Polybot deployment complete."
           EOF
