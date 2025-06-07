@@ -69,7 +69,6 @@ jobs:
 
             echo "📊 Installing OpenTelemetry & Prometheus..."
             chmod +x ~/install_otelcol.sh ~/install_prometheus.sh
-            sudo mv ~/otelcol-config.yaml /etc/otelcol/config.yaml
             export OTELCOL_IP="${OTELCOL_IP}"
             sudo -E ~/install_otelcol.sh
             sudo -E ~/install_prometheus.sh
