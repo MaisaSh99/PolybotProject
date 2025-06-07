@@ -9,6 +9,7 @@ Environment="YOLO_SERVICE_URL=http://10.0.1.143:8080"
 Environment="BOT_APP_URL=https://minnow-crucial-nicely.ngrok-free.app"
 Environment="S3_BUCKET_NAME=maisa-polybot-images"
 ExecStart=/home/ubuntu/PolybotProject/venv/bin/python3 -m polybot.app
+ExecStopPost=/usr/bin/fuser -k 8443/tcp
 Restart=always
 RestartSec=5
 StandardOutput=journal
