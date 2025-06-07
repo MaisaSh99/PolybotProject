@@ -36,6 +36,7 @@ def webhook():
 
     return 'Ok', 200
 
+print("✅ Registering /health route")
 @app.route('/health', methods=['GET'])
 def health():
     return 'ok', 200
