@@ -31,7 +31,7 @@ source venv/bin/activate
 export S3_BUCKET_NAME="maisa-dev-bucket"
 pip install --upgrade pip
 pip install flask
-pip install -r requirements.txt
+pip install -r polybot/requirements.txt
 pip install .
 
 
