@@ -30,6 +30,7 @@ source venv/bin/activate
 
 export S3_BUCKET_NAME="maisa-polybot-images"
 pip install --upgrade pip
+pip install flask
 pip install -r requirements.txt
 pip install .
 
