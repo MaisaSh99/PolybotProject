@@ -1,65 +1,65 @@
 #!/bin/bash
-
 set -e
 
-echo "🚀 Starting deployment to development..."
+echo "✅ Installing dependencies..."
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv git curl unzip wget
 
-ENV=dev
+cd ~
+REPO_NAME="PolybotProject"
+REPO_URL="https://github.com/MaisaSh99/PolybotProject.git"
 
-# Ensure virtual environment exists
+echo "📁 Cloning or updating repo..."
+if [ -d "$REPO_NAME" ]; then
+  cd "$REPO_NAME"
+  git stash
+  git checkout dev
+  git pull origin dev
+else
+  git clone -b dev "$REPO_URL"
+  cd "$REPO_NAME"
+fi
+
+echo "📦 Setting up Python venv..."
 if [ ! -d "venv" ]; then
   echo "📦 Creating Python virtual environment..."
   python3 -m venv venv
 fi
+source venv/bin/activate
 
-echo "🔑 Using SSH key..."
-echo "$EC2_SSH_KEY" > key.pem
-chmod 600 key.pem
+pip install --upgrade pip
+pip install -r polybot/requirements.txt
 
-echo "📤 Uploading project to EC2..."
-scp -i key.pem -o StrictHostKeyChecking=no -r . ubuntu@$EC2_IP:/home/ubuntu/polybot
+echo "📊 Installing OpenTelemetry & Prometheus..."
+bash .github/scripts/install_otelcol.sh
+bash .github/scripts/install_prometheus.sh
 
-echo "📦 Deploying on EC2..."
-ssh -i key.pem -o StrictHostKeyChecking=no ubuntu@$EC2_IP << 'EOF'
-  set -e
-  cd /home/ubuntu/polybot
+echo "🧼 Killing old bot process..."
+sudo fuser -k 8443/tcp || true
 
-  echo "✅ Installing dependencies..."
-  sudo apt update
-  sudo apt install -y git python3 python3-pip python3-venv curl unzip wget
+echo "⚙️ Starting Polybot dev systemd service..."
+sudo cp ~/polybot-dev.service /etc/systemd/system/polybot.service
+sudo systemctl daemon-reload
+sudo systemctl enable polybot.service
+sudo systemctl restart polybot.service
 
-  echo "📁 Cloning or updating repo..."
-  git reset --hard
-  git checkout dev
-  git pull origin dev
-
-  echo "📦 Setting up Python venv..."
-  if [ ! -d "venv" ]; then
-    python3 -m venv venv
+echo "🌐 Waiting for ngrok tunnel..."
+max_retries=10
+retry_delay=3
+attempt=1
+while [ $attempt -le $max_retries ]; do
+  if curl -s http://localhost:4040/api/tunnels | grep -q "public_url"; then
+    echo "✅ Ngrok tunnel is ready!"
+    break
   fi
-  source venv/bin/activate
-  pip install --upgrade pip
-  pip install -r polybot/requirements.txt
-  pip install boto3
+  echo "⏳ Waiting for ngrok... (attempt $attempt/$max_retries)"
+  sleep $retry_delay
+  ((attempt++))
+done
 
-  echo "📊 Installing OpenTelemetry & Prometheus..."
-  chmod +x .github/scripts/install_otelcol.sh
-  chmod +x .github/scripts/install_prometheus.sh
-  sudo .github/scripts/install_otelcol.sh
-  sudo .github/scripts/install_prometheus.sh
+if [ $attempt -gt $max_retries ]; then
+  echo "❌ Ngrok tunnel not ready."
+  exit 1
+fi
 
-  echo "🧼 Killing old bot process..."
-  sudo systemctl stop polybot-dev.service || true
-
-  echo "⚙️ Starting Polybot dev systemd service..."
-  sudo systemctl daemon-reexec
-  sudo systemctl restart polybot-dev.service
-  sudo systemctl enable polybot-dev.service
-
-  echo "🌐 Launching Ngrok in background on port 8443..."
-  nohup ./ngrok http 8443 > ngrok.log 2>&1 &
-
-  echo "📜 Ngrok is launching. Check ngrok.log for public URL."
-EOF
-
-echo "✅ Deployment to development completed!"
+echo "✅ Polybot Dev deployment complete!"
