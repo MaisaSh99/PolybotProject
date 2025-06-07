@@ -34,7 +34,8 @@ pip install -r requirements.txt
 pip install .
 
 
-echo "🛑 Stopping any service using port 8443..."
+echo "🛑 Stopping old service and killing port 8443..."
+sudo systemctl stop polybot-dev.service || true
 sudo fuser -k 8443/tcp || true
 
 echo "⚙️ Copying and enabling Polybot dev service..."
