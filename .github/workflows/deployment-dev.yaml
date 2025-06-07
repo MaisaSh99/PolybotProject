@@ -52,16 +52,16 @@ jobs:
               git checkout dev
               git pull origin dev
             else
-              git clone https://github.com/${REPO}.git PolybotProject
+              git clone https://github.com/MaisaSh99/PolybotProject.git PolybotProject
               cd PolybotProject
               git checkout dev
             fi
 
             echo "📦 Setting up Python venv..."
-            if [ -d "venv" ]; then
-              rm -rf venv
+            if [ ! -d "venv" ]; then
+              echo "📦 Creating Python virtual environment..."
+              python3 -m venv venv
             fi
-            python3 -m venv venv
             source venv/bin/activate
             export S3_BUCKET_NAME="maisa-dev-bucket"
             pip install --upgrade pip
