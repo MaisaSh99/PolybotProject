@@ -30,7 +30,6 @@ source venv/bin/activate
 
 export S3_BUCKET_NAME="maisa-polybot-images"
 pip install --upgrade pip
-pip install flask
 pip install -r polybot/requirements.txt
 pip install .
 
@@ -40,15 +39,15 @@ sudo fuser -k 8443/tcp || true
 sleep 2
 
 echo "⚙️ Copying and enabling Polybot production service..."
-sudo cp ~/polybot-prod.service /etc/systemd/system/polybot.service
+sudo cp ~/polybot-prod.service /etc/systemd/system/polybot-prod.service
 sudo systemctl daemon-reload
-sudo systemctl enable polybot.service
-sudo systemctl restart polybot.service
+sudo systemctl enable polybot-prod.service
+sudo systemctl restart polybot-prod.service
 
 echo "⏱ Waiting for service to be ready..."
-sleep 5  # Give extra time for health check route to become live
+sleep 5
 
 echo "📊 Checking Polybot production service status..."
-sudo systemctl status polybot.service || (journalctl -u polybot.service -n 50 --no-pager && exit 1)
+sudo systemctl status polybot-prod.service || (journalctl -u polybot-prod.service -n 50 --no-pager && exit 1)
 
 echo "✅ Polybot production service deployed and running!"

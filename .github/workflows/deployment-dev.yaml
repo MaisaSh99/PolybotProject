@@ -74,18 +74,16 @@ jobs:
             sudo -E ~/install_prometheus.sh
 
             echo "🧼 Killing old service if running..."
-            sudo systemctl stop polybot.service || true
+            sudo systemctl stop polybot-dev.service || true
             sleep 2
             sudo fuser -k 8080/tcp || true
             sudo fuser -k 8443/tcp || true
             sleep 2
             
-            # Wait until port 8443 is fully released
             while sudo lsof -i :8443 >/dev/null 2>&1; do
               echo "⏳ Waiting for port 8443 to free..."
               sleep 1
             done
-
 
             echo "⚙️ Enabling and starting polybot-dev.service"
             sudo mv ~/polybot-dev.service /etc/systemd/system/polybot-dev.service
@@ -94,12 +92,19 @@ jobs:
             sudo systemctl restart polybot-dev.service
 
             echo "⏱ Waiting for service..."
-            sleep 10
-            if curl -s http://localhost:8443/health | grep -q "ok"; then
-              echo "✅ Health check passed."
-            else
+            for i in {1..3}; do
+              sleep 5
+              if curl -s http://localhost:8443/health | grep -q "ok"; then
+                echo "✅ Health check passed."
+                break
+              else
+                echo "⏳ Retry \$i failed. Waiting..."
+              fi
+            done
+
+            if ! curl -s http://localhost:8443/health | grep -q "ok"; then
               echo "❌ Health check failed. Showing logs:"
-              journalctl -u polybot-dev.service -n 30 --no-pager
+              journalctl -u polybot-dev.service -n 50 --no-pager
               exit 1
             fi
 

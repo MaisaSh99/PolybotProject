@@ -2,11 +2,12 @@
 
 echo "📦 Installing OpenTelemetry Collector..."
 
+VERSION="0.101.0"
 cd /tmp
 
-# Download the latest tarball release
-wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/latest/download/otelcol-linux-amd64.tar.gz
-tar -xzf otelcol-linux-amd64.tar.gz
+# Download the specified version of the Collector
+wget https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${VERSION}/otelcol_${VERSION}_linux_amd64.tar.gz
+tar -xzf otelcol_${VERSION}_linux_amd64.tar.gz
 sudo mv otelcol /usr/local/bin/otelcol
 
 # Create config directory
