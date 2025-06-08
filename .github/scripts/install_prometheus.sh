@@ -23,7 +23,6 @@ sudo mkdir -p /etc/prometheus /var/lib/prometheus
 sudo cp -r consoles console_libraries /etc/prometheus/
 
 # Generate config
-# Generate config
 sudo tee /etc/prometheus/prometheus.yml > /dev/null <<EOL
 global:
   scrape_interval: 15s
@@ -42,7 +41,6 @@ scrape_configs:
       - targets: ['10.0.1.143:8889']
 EOL
 
-EOL
 
 # Create Prometheus systemd service
 sudo tee /etc/systemd/system/prometheus.service > /dev/null <<EOL
