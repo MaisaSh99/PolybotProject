@@ -39,11 +39,9 @@ jobs:
           ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << 'EOF'
             set -e
 
-            echo "✅ Installing dependencies..."
             sudo apt update
             sudo apt install -y git python3 python3-pip python3-venv wget curl unzip
 
-            echo "📁 Cloning or updating repo..."
             cd /home/ubuntu
             if [ -d "PolybotProject" ]; then
               cd PolybotProject
@@ -52,14 +50,12 @@ jobs:
               git checkout dev
               git pull origin dev
             else
-              git clone https://github.com/MaisaSh99/PolybotProject.git PolybotProject
+              git clone https://github.com/MaisaSh99/PolybotProject.git
               cd PolybotProject
               git checkout dev
             fi
 
-            echo "📦 Setting up Python venv..."
             if [ ! -d "venv" ]; then
-              echo "📦 Creating Python virtual environment..."
               python3 -m venv venv
             fi
             source venv/bin/activate
@@ -67,35 +63,28 @@ jobs:
             pip install --upgrade pip
             pip install -r polybot/requirements.txt
 
-            echo "📊 Installing OpenTelemetry & Prometheus..."
             chmod +x ~/install_otelcol.sh ~/install_prometheus.sh
             export OTELCOL_IP="${OTELCOL_IP}"
             sudo -E ~/install_otelcol.sh
             sudo -E ~/install_prometheus.sh
 
-            echo "🧼 Killing old service if running..."
             sudo systemctl stop polybot.service || true
             sleep 2
             sudo fuser -k 8080/tcp || true
             sudo fuser -k 8443/tcp || true
             sleep 2
-            
-            # Wait until port 8443 is fully released
             while sudo lsof -i :8443 >/dev/null 2>&1; do
               echo "⏳ Waiting for port 8443 to free..."
               sleep 1
             done
 
-
-            echo "⚙️ Enabling and starting polybot-dev.service"
             sudo mv ~/polybot-dev.service /etc/systemd/system/polybot-dev.service
             sudo systemctl daemon-reload
             sudo systemctl enable polybot-dev.service
             sudo systemctl restart polybot-dev.service
 
-            echo "⏱ Waiting for service..."
             sleep 10
-            if curl -s http://localhost:8443/health | grep -q "ok"; then
+            if curl -sk https://localhost/health | grep -q "ok"; then
               echo "✅ Health check passed."
             else
               echo "❌ Health check failed. Showing logs:"

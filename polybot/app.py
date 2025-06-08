@@ -5,11 +5,12 @@ from polybot.bot import Bot, QuoteBot, ImageProcessingBot
 
 app = flask.Flask(__name__)
 
+# ✅ Required environment variables
 TELEGRAM_BOT_TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
-BOT_APP_URL = os.environ['BOT_APP_URL']
+BOT_APP_URL = os.environ.get('BOT_APP_URL')
 YOLO_SERVICE_URL = os.environ['YOLO_SERVICE_URL']
 
-# ✅ Always initialize the bot globally
+# ✅ Initialize the bot globally
 bot = ImageProcessingBot(TELEGRAM_BOT_TOKEN, BOT_APP_URL, YOLO_SERVICE_URL)
 
 # ✅ Track processed update_ids during app runtime
@@ -36,10 +37,10 @@ def webhook():
 
     return 'Ok', 200
 
-print("✅ Registering /health route")
 @app.route('/health', methods=['GET'])
 def health():
     return 'ok', 200
 
 if __name__ == "__main__":
+    # ✅ Bind to 0.0.0.0 and port 8443 for Nginx reverse proxy
     app.run(host='0.0.0.0', port=8443)

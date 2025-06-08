@@ -15,9 +15,11 @@ class Bot:
     def __init__(self, token, telegram_chat_url):
         self.telegram_bot_client = telebot.TeleBot(token)
 
+        clean_url = telegram_chat_url.rstrip('/')
         try:
             self.telegram_bot_client.remove_webhook()
             time.sleep(0.5)
+            clean_url = telegram_chat_url.rstrip('/')
             self.telegram_bot_client.set_webhook(
                 url=f'{telegram_chat_url}/{token}/',
                 timeout=60
