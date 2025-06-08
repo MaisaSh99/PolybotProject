@@ -20,7 +20,12 @@ processed_update_ids = set()
 def index():
     return 'Ok'
 
-@app.route('/', methods=['POST'])  # 🔁 Simplified route to match Telegram default webhook
+@app.route('/health', methods=['GET'])
+def health():
+    return 'ok', 200
+
+# ✅ Register route based on actual token
+@app.route(f'/{TELEGRAM_BOT_TOKEN}/', methods=['POST'])
 def webhook():
     req = request.get_json()
     update_id = req.get("update_id")
@@ -37,10 +42,5 @@ def webhook():
 
     return 'Ok', 200
 
-@app.route('/health', methods=['GET'])
-def health():
-    return 'ok', 200
-
 if __name__ == "__main__":
-    # ✅ Bind to 0.0.0.0 and port 8443 for Nginx reverse proxy
     app.run(host='0.0.0.0', port=8443)
