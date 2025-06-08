@@ -1,7 +1,7 @@
 import flask
 from flask import request
 import os
-from polybot.bot import Bot, QuoteBot, ImageProcessingBot
+from polybot.bot import ImageProcessingBot
 
 app = flask.Flask(__name__)
 
@@ -20,7 +20,7 @@ processed_update_ids = set()
 def index():
     return 'Ok'
 
-@app.route(f'/{TELEGRAM_BOT_TOKEN}/', methods=['POST'])
+@app.route('/', methods=['POST'])  # 🔁 Simplified route to match Telegram default webhook
 def webhook():
     req = request.get_json()
     update_id = req.get("update_id")
