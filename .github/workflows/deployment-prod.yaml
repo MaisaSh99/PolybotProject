@@ -84,6 +84,13 @@ jobs:
             sudo fuser -k 8080/tcp || true
             sudo fuser -k 8443/tcp || true
             sleep 2
+            
+            # Wait until port 8443 is fully released
+            while sudo lsof -i :8443 >/dev/null 2>&1; do
+              echo "⏳ Waiting for port 8443 to free..."
+              sleep 1
+            done
+
 
 
             echo "⚙️ Enabling and starting polybot.service"
@@ -98,7 +105,7 @@ jobs:
               echo "✅ Health check passed."
             else
               echo "❌ Health check failed. Showing logs:"
-              journalctl -u polybot.service -n 30 --no-pager
+              sudo journalctl -u polybot.service --no-pager --since "5 minutes ago"
               exit 1
             fi
 
