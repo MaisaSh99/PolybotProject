@@ -79,6 +79,12 @@ jobs:
             sudo fuser -k 8080/tcp || true
             sudo fuser -k 8443/tcp || true
             sleep 2
+            
+            # Wait until port 8443 is fully released
+            while sudo lsof -i :8443 >/dev/null 2>&1; do
+              echo "⏳ Waiting for port 8443 to free..."
+              sleep 1
+            done
 
 
             echo "⚙️ Enabling and starting polybot-dev.service"
