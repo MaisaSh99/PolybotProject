@@ -6,7 +6,7 @@ After=network.target
 WorkingDirectory=/home/ubuntu/PolybotProject
 Environment="TELEGRAM_BOT_TOKEN=8174657275:AAF03Y8Q3p2SDfSI4ijtiZc7YCiwzpASEtw"
 Environment="YOLO_SERVICE_URL=http://10.0.1.143:8080"
-Environment="BOT_APP_URL=https://maisaprod.fursa.click/"
+Environment="BOT_APP_URL=https://maisaprod.fursa.click"
 Environment="S3_BUCKET_NAME=maisa-polybot-images"
 Environment="PYTHONUNBUFFERED=1"
 
