@@ -12,8 +12,9 @@ Environment="PYTHONUNBUFFERED=1"
 
 ExecStart=/home/ubuntu/PolybotProject/venv/bin/python3 -m polybot.app
 ExecStopPost=/usr/bin/fuser -k 8443/tcp
-Restart=always
+Restart=on-failure
 RestartSec=5
+KillMode=process
 StandardOutput=journal
 StandardError=journal
 
