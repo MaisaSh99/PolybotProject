@@ -59,7 +59,6 @@ jobs:
 
             echo "📦 Setting up Python venv..."
             if [ ! -d "venv" ]; then
-              echo "📦 Creating Python virtual environment..."
               python3 -m venv venv
             fi
             source venv/bin/activate
@@ -73,16 +72,16 @@ jobs:
             sudo -E ~/install_otelcol.sh
             sudo -E ~/install_prometheus.sh
 
-            echo "🧼 Killing old service if running..."
+            echo "🧼 Stopping old service and freeing port 8443..."
             sudo systemctl stop polybot-dev.service || true
-            sleep 2
-            sudo fuser -k 8080/tcp || true
-            sudo fuser -k 8443/tcp || true
-            sleep 2
-            
-            while sudo lsof -i :8443 >/dev/null 2>&1; do
-              echo "⏳ Waiting for port 8443 to free..."
-              sleep 1
+            for i in {1..5}; do
+              sudo fuser -k 8443/tcp || true
+              sleep 2
+              if ! sudo lsof -i :8443 >/dev/null 2>&1; then
+                echo "✅ Port 8443 is free."
+                break
+              fi
+              echo "⏳ Port 8443 still in use... retrying (\$i)"
             done
 
             echo "⚙️ Enabling and starting polybot-dev.service"
@@ -104,7 +103,7 @@ jobs:
 
             if ! curl -s http://localhost:8443/health | grep -q "ok"; then
               echo "❌ Health check failed. Showing logs:"
-              journalctl -u polybot-dev.service -n 50 --no-pager
+              sudo journalctl -u polybot-dev.service --no-pager --since "5 minutes ago"
               exit 1
             fi
 
