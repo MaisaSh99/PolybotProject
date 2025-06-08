@@ -5,15 +5,14 @@ from polybot.bot import ImageProcessingBot
 
 app = flask.Flask(__name__)
 
-# ✅ Required environment variables
+# ✅ Read environment variables
 TELEGRAM_BOT_TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
 BOT_APP_URL = os.environ.get('BOT_APP_URL')
 YOLO_SERVICE_URL = os.environ['YOLO_SERVICE_URL']
 
-# ✅ Initialize the bot globally
+# ✅ Init bot
 bot = ImageProcessingBot(TELEGRAM_BOT_TOKEN, BOT_APP_URL, YOLO_SERVICE_URL)
 
-# ✅ Track processed update_ids during app runtime
 processed_update_ids = set()
 
 @app.route('/', methods=['GET'])
@@ -24,7 +23,7 @@ def index():
 def health():
     return 'ok', 200
 
-# ✅ Register route based on actual token
+# ✅ Route must match Telegram webhook URL
 @app.route(f'/{TELEGRAM_BOT_TOKEN}/', methods=['POST'])
 def webhook():
     req = request.get_json()
