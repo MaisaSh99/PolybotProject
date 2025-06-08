@@ -1,14 +1,16 @@
 [Unit]
-Description=Polybot Telegram Bot Service
+Description=Polybot Telegram Bot Production Service
 After=network.target
 
 [Service]
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/home/ubuntu/PolybotProject
 Environment="TELEGRAM_BOT_TOKEN=8174657275:AAF03Y8Q3p2SDfSI4ijtiZc7YCiwzpASEtw"
 Environment="YOLO_SERVICE_URL=http://10.0.1.143:8080"
-Environment="BOT_APP_URL=https://minnow-crucial-nicely.ngrok-free.app"
+Environment="BOT_APP_URL=https://maisaprod.fursa.click/"
 Environment="S3_BUCKET_NAME=maisa-polybot-images"
-ExecStart=/home/ubuntu/PolybotProject/venv/bin/python3 -m polybot.app
+ExecStart="/home/ubuntu/PolybotProject/venv/bin/python3" -m polybot.app
 ExecStopPost=/usr/bin/fuser -k 8443/tcp
 Restart=always
 RestartSec=5

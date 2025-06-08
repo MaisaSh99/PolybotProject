@@ -30,10 +30,8 @@ source venv/bin/activate
 
 export S3_BUCKET_NAME="maisa-dev-bucket"
 pip install --upgrade pip
-pip install flask
 pip install -r polybot/requirements.txt
 pip install .
-
 
 echo "🛑 Stopping old service and killing port 8443..."
 sudo systemctl stop polybot-dev.service || true
@@ -47,9 +45,9 @@ sudo systemctl enable polybot-dev.service
 sudo systemctl restart polybot-dev.service
 
 echo "⏱ Waiting for service to be ready..."
-sleep 5  # Give extra time for health check route to become live
+sleep 5
 
-echo "📊 Checking Polybot production service status..."
+echo "📊 Checking Polybot dev service status..."
 sudo systemctl status polybot-dev.service || (journalctl -u polybot-dev.service -n 50 --no-pager && exit 1)
 
 echo "✅ Polybot dev service deployed and running!"

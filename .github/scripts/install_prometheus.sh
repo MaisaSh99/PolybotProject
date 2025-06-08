@@ -4,26 +4,25 @@ set -e
 PROM_VERSION="2.51.1"
 FOLDER="prometheus-${PROM_VERSION}.linux-amd64"
 FILENAME="${FOLDER}.tar.gz"
-
-OTELCOL_IP=${OTELCOL_IP:-"127.0.0.1"}  # fallback to localhost if not passed
+OTELCOL_IP=${OTELCOL_IP:-"127.0.0.1"}  # fallback if not set
 
 echo "📦 Installing Prometheus v${PROM_VERSION}..."
 
 cd /tmp
-wget https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/${FILENAME}
+wget -q https://github.com/prometheus/prometheus/releases/download/v${PROM_VERSION}/${FILENAME}
 tar -xzf ${FILENAME}
 cd ${FOLDER}
 
-# Move binaries to system path
+# Move binaries
 sudo mv prometheus /usr/local/bin/
 sudo mv promtool /usr/local/bin/
 
-# Setup configuration and data directories
+# Setup config and data dirs
 sudo mkdir -p /etc/prometheus /var/lib/prometheus
 sudo cp -r consoles console_libraries /etc/prometheus/
 
-# Generate config
-sudo tee /etc/prometheus/prometheus.yml > /dev/null <<EOL
+# Write Prometheus config
+sudo tee /etc/prometheus/prometheus.yml > /dev/null <<EOF
 global:
   scrape_interval: 15s
 
@@ -39,11 +38,10 @@ scrape_configs:
   - job_name: 'otel-collector-yolo'
     static_configs:
       - targets: ['10.0.1.143:8889']
-EOL
-
+EOF
 
 # Create Prometheus systemd service
-sudo tee /etc/systemd/system/prometheus.service > /dev/null <<EOL
+sudo tee /etc/systemd/system/prometheus.service > /dev/null <<EOF
 [Unit]
 Description=Prometheus Monitoring
 After=network.target
@@ -54,12 +52,15 @@ ExecStart=/usr/local/bin/prometheus \
   --storage.tsdb.path=/var/lib/prometheus/ \
   --web.listen-address=:9090
 Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-EOL
+EOF
 
-# Reload and start service
+# Start Prometheus
 sudo systemctl daemon-reload
 sudo systemctl enable prometheus
 sudo systemctl restart prometheus
