@@ -1,0 +1,37 @@
+name: Polybot Build Dev
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  Build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build and Push Docker image
+        id: build
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
+          
+          img_name=${{ secrets.DOCKERHUB_USERNAME }}/polybot-dev:${{github.run_number}}
+          
+          # Output image name to pass to next workflow 
+          echo "image=$img_name" >> $GITHUB_OUTPUT
+           
+          # Build & push the image 
+          docker build --push -t $img_name .
+
+  Deploy:
+    needs: Build 
+    uses: ./.github/workflows/deploy-dev.yaml
+    with:
+      image: ${{ needs.Build.outputs.image }}
+    secrets: inherit
