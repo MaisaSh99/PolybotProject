@@ -6,82 +6,120 @@ on:
       image:
         required: true
         type: string
+
+    secrets:
+      EC2_SSH_KEY:
+        required: true
+      EC2_DEV_HOST:
+        required: true
+      EC2_DEV_USER:
+        required: true
+      BOT_DEV_TOKEN:
+        required: true
+      BOT_APP_URL_DEV:
+        required: true
+      YOLO_SERVER_URL_DEV:
+        required: true
+      S3_BUCKET_NAME_DEV:
+        required: true
+
   workflow_dispatch:
     inputs:
       image:
         required: true
         type: string
+        description: 'Docker image name to deploy'
 
 jobs:
-  Deploy:
+  deploy:
     runs-on: ubuntu-latest
-    env:
-      PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-      EC2_IP: ${{ secrets.EC2_DEV_HOST }}
-      EC2_USER: ${{ secrets.EC2_DEV_USER }}
-      
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up SSH key
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download image name artifact (fallback)
+        uses: actions/download-artifact@v4
+        with:
+          name: image-name
+          path: ./
+        continue-on-error: true
+
+      - name: Setup SSH key
         run: |
           echo "${{ secrets.EC2_SSH_KEY }}" > key.pem
           chmod 600 key.pem
 
-      - name: Upload Docker compose and configs
+      - name: Determine image name
+        id: get-image
         run: |
-          scp -i key.pem -o StrictHostKeyChecking=no docker-compose.dev.yaml $EC2_USER@$EC2_IP:~/docker-compose.dev.yaml
-          scp -i key.pem -o StrictHostKeyChecking=no otelcol-config.yaml $EC2_USER@$EC2_IP:~/otelcol-config.yaml
-          scp -i key.pem -o StrictHostKeyChecking=no .github/scripts/install_otelcol.sh $EC2_USER@$EC2_IP:~/install_otelcol.sh
-          scp -i key.pem -o StrictHostKeyChecking=no .github/scripts/install_prometheus.sh $EC2_USER@$EC2_IP:~/install_prometheus.sh
+          # Try input first
+          if [ -n "${{ inputs.image }}" ]; then
+            IMAGE_NAME="${{ inputs.image }}"
+            echo "✅ Using input image: $IMAGE_NAME"
+          # Fallback to artifact
+          elif [ -f "image_name.txt" ]; then
+            IMAGE_NAME=$(cat image_name.txt)
+            echo "✅ Using artifact image: $IMAGE_NAME"
+          else
+            echo "❌ No image name found!"
+            exit 1
+          fi
+          
+          echo "image=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "🚀 Final image name: $IMAGE_NAME"
 
-      - name: Deploy Docker image
+      - name: Create .env file
         run: |
-          ssh -i key.pem -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP << 'EOF'
-            set -e
-            
-            # Install Docker if not present
+          IMAGE_NAME="${{ steps.get-image.outputs.image }}"
+          
+          echo "IMG_NAME=$IMAGE_NAME" > .env
+          echo "TELEGRAM_BOT_TOKEN=${{ secrets.BOT_DEV_TOKEN }}" >> .env
+          echo "BOT_APP_URL=${{ secrets.BOT_APP_URL_DEV }}" >> .env
+          echo "YOLO_SERVICE_URL=${{ secrets.YOLO_SERVER_URL_DEV }}" >> .env
+          echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME_DEV }}" >> .env
+          
+          echo "📝 Contents of .env file:"
+          cat .env
+
+      - name: SSH and deploy using Docker Compose
+        run: |
+          scp -i key.pem -o StrictHostKeyChecking=no .env ${{ secrets.EC2_DEV_USER }}@${{ secrets.EC2_DEV_HOST }}:/home/ubuntu/PolybotProject/.env
+
+          ssh -i key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_DEV_USER }}@${{ secrets.EC2_DEV_HOST }} << 'EOF'
+            echo "📁 Cloning or updating repo"
+            if [ -d "PolybotProject" ]; then
+              cd PolybotProject
+              git checkout dev
+              git pull origin dev
+            else
+              git clone --branch dev https://github.com/${{ github.repository }} PolybotProject
+              cd PolybotProject
+            fi
+          
+            echo "📝 Checking .env file contents on server:"
+            cat .env
+                    
+            echo "[+] Checking for Docker"
             if ! command -v docker &> /dev/null; then
               echo "📦 Installing Docker..."
-              sudo apt-get update
-              sudo apt-get install -y docker.io docker-compose-plugin
-              sudo systemctl start docker
-              sudo systemctl enable docker
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sh get-docker.sh
               sudo usermod -aG docker $USER
+              newgrp docker
+            else
+              echo "✅ Docker already installed"
             fi
 
-            # Generate .env file
-            echo """
-            IMG_NAME=${{ inputs.image }}
-            TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-            TELEGRAM_APP_URL=https://maisadev.fursa.click
-            """ > .env
+            echo "🐳 Running Docker Compose for Dev"
+            docker compose -f docker-compose.dev.yaml pull
+            docker compose -f docker-compose.dev.yaml up -d --remove-orphans
 
-            # Stop existing containers
-            docker compose -f docker-compose.dev.yaml down || true
-            
-            # Pull the new image
-            docker pull ${{ inputs.image }}
-            
-            # Start the containers using docker compose
-            docker compose -f docker-compose.dev.yaml up -d
-
-            # Wait for health check
-            echo "⏱ Waiting for service to be healthy..."
-            for i in {1..12}; do
-              sleep 10
-              if docker exec polybot-dev curl -f http://localhost:8443/health >/dev/null 2>&1; then
-                echo "✅ Health check passed."
-                break
-              else
-                echo "⏳ Retry $i failed. Waiting..."
-                if [ $i -eq 12 ]; then
-                  echo "❌ Health check failed after 2 minutes"
-                  docker compose -f docker-compose.dev.yaml logs polybot
-                  exit 1
-                fi
-              fi
-            done
-
-            echo "✅ Dev Polybot deployment complete."
+            echo "🔍 Verifying OpenTelemetry metrics endpoint"
+            if curl -s http://localhost:8889/metrics | grep -q 'system_cpu_time'; then
+              echo "✅ OpenTelemetry metrics are exposed"
+            else
+              echo "⚠️ Metrics not available"
+              docker logs $(docker ps -qf "name=otelcol") 2>/dev/null || echo "No otelcol container found"
+            fi
           EOF
