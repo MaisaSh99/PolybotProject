@@ -31,13 +31,35 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
-  - job_name: 'otel-collector-polybot'
+  # Development Environment
+  - job_name: 'otel-collector-polybot-dev'
+    static_configs:
+      - targets: ['10.0.0.7:8889']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  - job_name: 'otel-collector-yolo-dev'
+    static_configs:
+      - targets: ['10.0.1.17:8889']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+
+  # Production Environment
+  - job_name: 'otel-collector-polybot-prod'
     static_configs:
       - targets: ['10.0.0.135:8889']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
 
-  - job_name: 'otel-collector-yolo'
+  - job_name: 'otel-collector-yolo-prod'
     static_configs:
       - targets: ['10.0.1.143:8889']
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+    scrape_timeout: 10s
 EOF
 
 # Create Prometheus systemd service
