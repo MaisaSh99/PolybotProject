@@ -1,37 +1,62 @@
 name: Polybot Build Dev
-
 on:
   push:
     branches:
       - dev
-
 jobs:
-  Build:
+  build:
     runs-on: ubuntu-latest
     outputs:
-      image: ${{ steps.build.outputs.image }}
+      image: ${{ steps.save-image.outputs.image }}
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Build and Push Docker image
-        id: build
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Log in to DockerHub
+        run: echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
+      - name: Build and push Docker image with curl
         run: |
-          docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" -p "${{ secrets.DOCKERHUB_TOKEN }}"
-          
-          img_name=${{ secrets.DOCKERHUB_USERNAME }}/polybot-dev:${{github.run_number}}
-          
-          # Output image name to pass to next workflow 
-          echo "image=$img_name" >> $GITHUB_OUTPUT
-           
-          # Build & push the image 
-          docker build --push -t $img_name .
-
-  Deploy:
-    needs: Build 
+          BASE_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/polybot-dev-base:${{ github.run_number }}
+          IMAGE_NAME=${{ secrets.DOCKERHUB_USERNAME }}/polybot-dev:${{ github.run_number }}
+      
+          echo "🔧 Building base image (original)"
+          docker build -t $BASE_IMAGE .
+      
+          echo "🔧 Creating patched Dockerfile with curl"
+          echo "FROM $BASE_IMAGE" > Dockerfile.patched
+          echo "RUN apt-get update && apt-get install -y curl" >> Dockerfile.patched
+      
+          echo "🔧 Building final image with curl: $IMAGE_NAME"
+          docker build -t $IMAGE_NAME -f Dockerfile.patched .
+      
+          echo "📤 Pushing final image to DockerHub"
+          docker push $IMAGE_NAME
+      
+          echo "$IMAGE_NAME" > image_name.txt
+      - name: Save image name as output
+        id: save-image
+        run: |
+          IMAGE_NAME=$(cat image_name.txt)
+          echo "image=$IMAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "✅ Saved image output: $IMAGE_NAME"
+      - name: Upload image name as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-name
+          path: image_name.txt
+      - name: Debug outputs
+        run: |
+          echo "🔍 Step output: ${{ steps.save-image.outputs.image }}"
+          echo "🔍 File contents:"
+          cat image_name.txt
+  deploy:
+    needs: build
     uses: ./.github/workflows/deploy-dev.yaml
     with:
-      image: ${{ needs.Build.outputs.image }}
-    secrets: inherit
+      image: ${{ needs.build.outputs.image }}
+    secrets:
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_DEV_HOST: ${{ secrets.EC2_DEV_HOST }}
+      EC2_DEV_USER: ${{ secrets.EC2_DEV_USER }}
+      BOT_DEV_TOKEN: ${{ secrets.BOT_DEV_TOKEN }}
+      BOT_APP_URL_DEV: ${{ secrets.BOT_APP_URL_DEV }}
+      YOLO_SERVER_URL_DEV: ${{ secrets.YOLO_SERVER_URL_DEV }}
+      S3_BUCKET_NAME_DEV: ${{ secrets.S3_BUCKET_NAME_DEV }}
