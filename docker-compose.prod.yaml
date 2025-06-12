@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   polybot:
     image: ${IMG_NAME}
@@ -8,9 +6,9 @@ services:
       - "8443:8443"
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - YOLO_SERVICE_URL=http://10.0.1.143:8080
-      - BOT_APP_URL=${TELEGRAM_APP_URL}
-      - S3_BUCKET_NAME=maisa-polybot-images
+      - YOLO_SERVICE_URL=${YOLO_SERVICE_URL}
+      - BOT_APP_URL=${BOT_APP_URL}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
     healthcheck:
