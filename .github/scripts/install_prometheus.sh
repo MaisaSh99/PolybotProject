@@ -22,7 +22,7 @@ sudo mkdir -p /etc/prometheus /var/lib/prometheus
 sudo cp -r consoles console_libraries /etc/prometheus/
 
 # Write Prometheus config
-sudo tee /etc/prometheus/prometheus.yml > /dev/null <<EOF
+sudo tee /etc/prometheus/prometheus.yml > /dev/null <<EOL
 global:
   scrape_interval: 15s
 
@@ -60,10 +60,10 @@ scrape_configs:
     metrics_path: '/metrics'
     scrape_interval: 15s
     scrape_timeout: 10s
-EOF
+EOL
 
 # Create Prometheus systemd service
-sudo tee /etc/systemd/system/prometheus.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/prometheus.service > /dev/null <<EOL
 [Unit]
 Description=Prometheus Monitoring
 After=network.target
@@ -80,7 +80,7 @@ StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-EOF
+EOL
 
 # Start Prometheus
 sudo systemctl daemon-reload
