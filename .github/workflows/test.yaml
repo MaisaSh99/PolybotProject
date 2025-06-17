@@ -60,7 +60,7 @@ jobs:
           # Build the image that will be scanned
           docker build -t polybot-scan:${{ github.sha }} .
 
-      - name: Run Docker Scout vulnerability scan
+      - name: Run Docker Scout vulnerability scan (for SARIF)
         uses: docker/scout-action@v1
         with:
           command: cves
@@ -80,8 +80,8 @@ jobs:
           image: polybot-scan:${{ github.sha }}
           exit-code: true
           exit-on: vulnerability
-          # Fail on CRITICAL and HIGH vulnerabilities
-          severity: critical,high
+          # Fail on CRITICAL and HIGH vulnerabilities only
+          only-severities: critical,high
 
       - name: Generate Docker Scout report for PR comment
         id: scout-report
