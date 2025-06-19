@@ -3,7 +3,6 @@ import threading
 import telebot
 from loguru import logger
 import os
-import sys
 import time
 import requests
 import boto3
@@ -12,7 +11,6 @@ import uuid
 from telebot.types import InputFile
 from polybot.img_proc import Img
 from datetime import datetime, timezone
-from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
 
 
 class Bot:
@@ -95,82 +93,24 @@ class ImageProcessingBot(Bot):
         self.media_groups = {}
         self.yolo_service_url = yolo_service_url
 
-        # Initialize SQS for async communication with proper credential handling
-        self.sqs = None
-        self.queue_url = None
-        self.aws_available = False
+        # Initialize SQS for async communication
+        self.sqs = boto3.client('sqs', region_name='us-east-2')
 
-        # Check if we're in a test environment
-        self.is_test_environment = self._is_test_environment()
-
-        if not self.is_test_environment:
-            self._initialize_aws_services()
+        # Determine which queue to use based on environment
+        env = os.getenv('ENVIRONMENT', 'dev').lower()
+        if env == 'prod':
+            self.queue_name = 'maisa-polybot-chat-messages'
         else:
-            logger.info("🧪 Test environment detected, skipping AWS initialization")
+            self.queue_name = 'maisa-polybot-chat-messages-dev'
 
-    def _is_test_environment(self):
-        """Check if we're running in a test environment"""
+        # Get queue URL
         try:
-            # Simple and reliable test detection methods
-            test_indicators = [
-                # Check environment variables
-                os.environ.get('TESTING') == 'true',
-                os.environ.get('CI') == 'true',  # Common in CI environments
-
-                # Check sys.argv safely
-                len(sys.argv) > 0 and 'test' in sys.argv[0],
-                len(sys.argv) > 1 and any('test' in str(arg) for arg in sys.argv[1:]),
-
-                # Check if unittest module is loaded
-                'unittest' in sys.modules,
-                'pytest' in sys.modules,
-
-                # Check current working directory for test indicators
-                'test' in os.getcwd().lower(),
-            ]
-
-            is_test = any(test_indicators)
-            if is_test:
-                logger.info("🧪 Test environment detected")
-            return is_test
-
-        except Exception as e:
-            logger.debug(f"Test detection error (assuming production): {e}")
-            return False
-
-    def _initialize_aws_services(self):
-        """Initialize AWS services with proper error handling"""
-        try:
-            # Test AWS credentials by creating a client and making a simple call
-            sts = boto3.client('sts', region_name='us-east-2')
-            sts.get_caller_identity()  # This will fail if no credentials
-
-            # If we get here, credentials are working
-            self.sqs = boto3.client('sqs', region_name='us-east-2')
-
-            # Determine which queue to use based on environment
-            env = os.getenv('ENVIRONMENT', 'dev').lower()
-            if env == 'prod':
-                self.queue_name = 'maisa-polybot-chat-messages'
-            else:
-                self.queue_name = 'maisa-polybot-chat-messages-dev'
-
-            # Get queue URL
             response = self.sqs.get_queue_url(QueueName=self.queue_name)
             self.queue_url = response['QueueUrl']
-            self.aws_available = True
-            logger.info(f"✅ AWS services initialized - Using SQS queue: {self.queue_name}")
-
-        except (NoCredentialsError, PartialCredentialsError) as e:
-            logger.warning(f"⚠️ AWS credentials not configured: {e}")
-            logger.info("ℹ️ SQS features will be disabled, falling back to sync processing")
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'AWS.SimpleQueueService.NonExistentQueue':
-                logger.error(f"❌ SQS queue '{self.queue_name}' does not exist")
-            else:
-                logger.error(f"❌ AWS client error: {e}")
+            logger.info(f"✅ Using SQS queue: {self.queue_name}")
         except Exception as e:
-            logger.error(f"❌ Failed to initialize AWS services: {e}")
+            logger.error(f"❌ Failed to get SQS queue URL: {e}")
+            self.queue_url = None
 
     def upload_file_to_s3(self, local_path, bucket_name, s3_key):
         logger.info("📦 Preparing upload to S3")
@@ -179,12 +119,8 @@ class ImageProcessingBot(Bot):
             logger.error(f"❌ File not found: {local_path}")
             return None
 
-        if not self.aws_available:
-            logger.warning("⚠️ AWS not available, skipping S3 upload")
-            return f"s3://{bucket_name}/{s3_key}"  # Return mock URL for tests
-
+        s3 = boto3.client('s3')
         try:
-            s3 = boto3.client('s3')
             logger.info(f"⬆️ Uploading {local_path} to s3://{bucket_name}/{s3_key}")
             s3.upload_file(local_path, bucket_name, s3_key)
             logger.info("✅ File uploaded to S3.")
@@ -195,8 +131,8 @@ class ImageProcessingBot(Bot):
 
     def send_to_yolo_queue(self, chat_id, s3_image_url, prediction_id):
         """Send message to SQS queue for YOLO processing"""
-        if not self.aws_available or not self.sqs or not self.queue_url:
-            logger.warning("⚠️ SQS not available")
+        if not self.queue_url:
+            logger.error("❌ SQS queue not available")
             return False
 
         try:
@@ -206,7 +142,7 @@ class ImageProcessingBot(Bot):
                 "image_url": s3_image_url,
                 "prediction_id": prediction_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "callback_url": f"{os.getenv('BOT_APP_URL', 'http://localhost:8443')}/yolo-result"
+                "callback_url": f"{os.getenv('BOT_APP_URL')}/yolo-result"
             }
 
             response = self.sqs.send_message(
@@ -267,11 +203,7 @@ class ImageProcessingBot(Bot):
                 return
 
             if caption == 'yolo':
-                if self.aws_available:
-                    self.apply_yolo_async(chat_id, photo_path)
-                else:
-                    logger.info("ℹ️ AWS not available, using sync YOLO processing")
-                    self.apply_yolo_sync(chat_id, photo_path)
+                self.apply_yolo_async(chat_id, photo_path)
             else:
                 self.apply_filter_from_caption(chat_id, photo_path, caption)
             return
@@ -405,10 +337,7 @@ class ImageProcessingBot(Bot):
 
         if filter_name == 'yolo':
             for photo_path in photos:
-                if self.aws_available:
-                    self.apply_yolo_async(chat_id, photo_path)
-                else:
-                    self.apply_yolo_sync(chat_id, photo_path)
+                self.apply_yolo_async(chat_id, photo_path)
         else:
             for photo_path in photos:
                 self.apply_filter_from_caption(chat_id, photo_path, filter_name)
