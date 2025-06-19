@@ -9,6 +9,7 @@ services:
       - YOLO_SERVICE_URL=${YOLO_SERVICE_URL}
       - BOT_APP_URL=${BOT_APP_URL}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - ENVIRONMENT=dev
       - PYTHONUNBUFFERED=1
     restart: unless-stopped
     healthcheck:
