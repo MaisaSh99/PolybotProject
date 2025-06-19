@@ -3,6 +3,7 @@ import threading
 import telebot
 from loguru import logger
 import os
+import sys
 import time
 import requests
 import boto3
@@ -109,15 +110,33 @@ class ImageProcessingBot(Bot):
 
     def _is_test_environment(self):
         """Check if we're running in a test environment"""
-        # Check for common test indicators
-        test_indicators = [
-            'pytest' in os.environ.get('_', ''),
-            'unittest' in os.environ.get('_', ''),
-            os.environ.get('TESTING') == 'true',
-            'test' in os.argv[0] if os.argv else False,
-            any('test' in arg for arg in os.argv) if os.argv else False
-        ]
-        return any(test_indicators)
+        try:
+            # Simple and reliable test detection methods
+            test_indicators = [
+                # Check environment variables
+                os.environ.get('TESTING') == 'true',
+                os.environ.get('CI') == 'true',  # Common in CI environments
+
+                # Check sys.argv safely
+                len(sys.argv) > 0 and 'test' in sys.argv[0],
+                len(sys.argv) > 1 and any('test' in str(arg) for arg in sys.argv[1:]),
+
+                # Check if unittest module is loaded
+                'unittest' in sys.modules,
+                'pytest' in sys.modules,
+
+                # Check current working directory for test indicators
+                'test' in os.getcwd().lower(),
+            ]
+
+            is_test = any(test_indicators)
+            if is_test:
+                logger.info("🧪 Test environment detected")
+            return is_test
+
+        except Exception as e:
+            logger.debug(f"Test detection error (assuming production): {e}")
+            return False
 
     def _initialize_aws_services(self):
         """Initialize AWS services with proper error handling"""
