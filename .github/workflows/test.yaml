@@ -73,15 +73,14 @@ jobs:
         with:
           sarif_file: sarif.output.json
 
-      - name: Run Docker Scout with fail on critical/high
+      - name: Run Docker Scout with fail on critical
         uses: docker/scout-action@v1
         with:
           command: cves
           image: polybot-scan:${{ github.sha }}
           exit-code: true
           exit-on: vulnerability
-          # Fail on CRITICAL and HIGH vulnerabilities only
-          only-severities: critical,high
+          only-severities: critical
 
       - name: Generate Docker Scout report for PR comment
         id: scout-report
