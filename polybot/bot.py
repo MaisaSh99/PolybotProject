@@ -6,6 +6,8 @@ import os
 import time
 import requests
 import boto3
+import json
+import uuid
 from telebot.types import InputFile
 from polybot.img_proc import Img
 from datetime import datetime, timezone
@@ -91,20 +93,75 @@ class ImageProcessingBot(Bot):
         self.media_groups = {}
         self.yolo_service_url = yolo_service_url
 
+        # Initialize SQS for async communication
+        self.sqs = boto3.client('sqs', region_name='us-east-2')
+
+        # Determine which queue to use based on environment
+        env = os.getenv('ENVIRONMENT', 'dev').lower()
+        if env == 'prod':
+            self.queue_name = 'maisa-polybot-chat-messages'
+        else:
+            self.queue_name = 'maisa-polybot-chat-messages-dev'
+
+        # Get queue URL
+        try:
+            response = self.sqs.get_queue_url(QueueName=self.queue_name)
+            self.queue_url = response['QueueUrl']
+            logger.info(f"✅ Using SQS queue: {self.queue_name}")
+        except Exception as e:
+            logger.error(f"❌ Failed to get SQS queue URL: {e}")
+            self.queue_url = None
+
     def upload_file_to_s3(self, local_path, bucket_name, s3_key):
         logger.info("📦 Preparing upload to S3")
 
         if not os.path.exists(local_path):
             logger.error(f"❌ File not found: {local_path}")
-            return
+            return None
 
         s3 = boto3.client('s3')
         try:
             logger.info(f"⬆️ Uploading {local_path} to s3://{bucket_name}/{s3_key}")
             s3.upload_file(local_path, bucket_name, s3_key)
             logger.info("✅ File uploaded to S3.")
+            return f"s3://{bucket_name}/{s3_key}"
         except Exception as e:
             logger.error(f"❌ Upload to S3 failed: {e}")
+            return None
+
+    def send_to_yolo_queue(self, chat_id, s3_image_url, prediction_id):
+        """Send message to SQS queue for YOLO processing"""
+        if not self.queue_url:
+            logger.error("❌ SQS queue not available")
+            return False
+
+        try:
+            message_body = {
+                "type": "yolo_request",
+                "chat_id": chat_id,
+                "image_url": s3_image_url,
+                "prediction_id": prediction_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "callback_url": f"{os.getenv('BOT_APP_URL')}/yolo-result"
+            }
+
+            response = self.sqs.send_message(
+                QueueUrl=self.queue_url,
+                MessageBody=json.dumps(message_body),
+                MessageAttributes={
+                    'MessageType': {
+                        'StringValue': 'yolo_request',
+                        'DataType': 'String'
+                    }
+                }
+            )
+
+            logger.info(f"✅ YOLO request sent to SQS: {response['MessageId']}")
+            return True
+
+        except Exception as e:
+            logger.error(f"❌ Failed to send to SQS: {e}")
+            return False
 
     def handle_message(self, msg):
         chat_id = msg['chat']['id']
@@ -146,7 +203,7 @@ class ImageProcessingBot(Bot):
                 return
 
             if caption == 'yolo':
-                self.apply_yolo(chat_id, photo_path)
+                self.apply_yolo_async(chat_id, photo_path)
             else:
                 self.apply_filter_from_caption(chat_id, photo_path, caption)
             return
@@ -178,7 +235,41 @@ class ImageProcessingBot(Bot):
             logger.exception("Filter application failed")
             self.send_text(chat_id, "Failed to apply the selected filter.")
 
-    def apply_yolo(self, chat_id, photo_path):
+    def apply_yolo_async(self, chat_id, photo_path):
+        """Apply YOLO detection using async SQS communication"""
+        try:
+            bucket_name = os.getenv("S3_BUCKET_NAME")
+            if not bucket_name:
+                self.send_text(chat_id, "S3 bucket not configured. Contact admin.")
+                return
+
+            user_id = chat_id
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+            prediction_id = str(uuid.uuid4())
+
+            # Upload image to S3
+            s3_key = f"images/{user_id}/{timestamp}-{os.path.basename(photo_path)}"
+            s3_image_url = self.upload_file_to_s3(photo_path, bucket_name, s3_key)
+
+            if not s3_image_url:
+                self.send_text(chat_id, "Failed to upload image. Please try again.")
+                return
+
+            # Send to YOLO queue for async processing
+            if self.send_to_yolo_queue(chat_id, s3_image_url, prediction_id):
+                self.send_text(chat_id, f"🔄 Your image is being processed... Request ID: {prediction_id[:8]}")
+                logger.info(f"✅ YOLO processing queued for prediction {prediction_id}")
+            else:
+                # Fallback to sync processing if SQS fails
+                logger.warning("⚠️ SQS failed, falling back to sync processing")
+                self.apply_yolo_sync(chat_id, photo_path)
+
+        except Exception:
+            logger.exception("YOLO async processing failed")
+            self.send_text(chat_id, "Failed to process image with YOLO.")
+
+    def apply_yolo_sync(self, chat_id, photo_path):
+        """Fallback sync YOLO processing (original method)"""
         try:
             bucket_name = os.getenv("S3_BUCKET_NAME")
             if not bucket_name:
@@ -230,3 +321,23 @@ class ImageProcessingBot(Bot):
             logger.exception("YOLO prediction failed")
             self.send_text(chat_id, "Failed to process image with YOLO.")
 
+    def _process_media_group(self, media_group_id):
+        """Process media group"""
+        group = self.media_groups.pop(media_group_id, None)
+        if not group:
+            return
+
+        chat_id = group['chat_id']
+        photos = group['photos']
+        filter_name = group['filter']
+
+        if not filter_name:
+            self.send_text(chat_id, "You need to choose a filter for the media group.")
+            return
+
+        if filter_name == 'yolo':
+            for photo_path in photos:
+                self.apply_yolo_async(chat_id, photo_path)
+        else:
+            for photo_path in photos:
+                self.apply_filter_from_caption(chat_id, photo_path, filter_name)

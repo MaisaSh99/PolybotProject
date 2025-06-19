@@ -78,6 +78,8 @@ jobs:
           echo "BOT_APP_URL=${{ secrets.BOT_APP_URL_PROD }}" >> .env
           echo "YOLO_SERVICE_URL=${{ secrets.YOLO_SERVER_URL_PROD }}" >> .env
           echo "S3_BUCKET_NAME=${{ secrets.S3_BUCKET_NAME_PROD }}" >> .env
+          echo "ENVIRONMENT=prod" >> .env
+          echo "PYTHONUNBUFFERED=1" >> .env
           
           echo "📝 Contents of .env file:"
           cat .env
@@ -114,6 +116,15 @@ jobs:
             echo "🐳 Running Docker Compose for Prod"
             docker compose -f docker-compose.prod.yaml pull
             docker compose -f docker-compose.prod.yaml up -d --remove-orphans
+
+            echo "🔍 Verifying Polybot health"
+            sleep 10
+            if curl -s http://localhost:8443/health | grep -q 'ok'; then
+              echo "✅ Polybot health check passed"
+            else
+              echo "⚠️ Polybot health check failed"
+              docker logs polybot-prod 2>/dev/null || echo "No polybot container found"
+            fi
 
             echo "🔍 Verifying OpenTelemetry metrics endpoint"
             if curl -s http://localhost:8889/metrics | grep -q 'system_cpu_time'; then
